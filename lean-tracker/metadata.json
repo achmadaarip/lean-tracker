@@ -1,0 +1,6 @@
+{
+  "name": "Lean Tracker",
+  "description": "A personal body recomposition tracker designed for long-term fat loss while maintaining muscle mass.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
