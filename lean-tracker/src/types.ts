@@ -53,6 +53,9 @@ export interface UserProfile {
   height?: number; // in cm
   notificationsEnabled?: boolean;
   activityLevel?: string; // e.g. "Sedentary", "Active", etc.
+  age?: number;
+  gender?: string;
+  currentWeight?: number;
 }
 
 export interface FoodDbItem {
@@ -65,15 +68,24 @@ export interface FoodDbItem {
   protein: number;
   carbs: number;
   fat: number;
+  isCustom?: boolean;
 }
 
 export interface MealPresetItem {
   foodId: string; // references FoodDbItem.id
   quantity: number;
+  name?: string;
+  calories?: number;
+  protein?: number;
+  carbs?: number;
+  fat?: number;
 }
 
 export interface MealPreset {
   id: string;
   name: string; // e.g. "Breakfast Diet"
   items: MealPresetItem[];
+  category?: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+  totalCalories?: number;
+  totalProtein?: number;
 }

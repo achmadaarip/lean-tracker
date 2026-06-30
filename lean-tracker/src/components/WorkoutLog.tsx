@@ -83,11 +83,12 @@ export default function WorkoutLog({
                 strokeWidth="6" 
               />
               <motion.circle 
+                className="text-primary"
                 cx="72" 
                 cy="72" 
                 r="58" 
                 fill="transparent" 
-                stroke="var(--color-primary)" 
+                stroke="currentColor" 
                 strokeWidth="6.5" 
                 strokeDasharray={strokeCircumference}
                 initial={{ strokeDashoffset: strokeCircumference }}

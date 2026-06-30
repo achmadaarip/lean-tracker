@@ -1,15 +1,18 @@
-import React, { useState } from 'react';
-import { Calendar, Trash2, Dumbbell, Utensils, Scale, Plus, Award } from 'lucide-react';
+import React from 'react';
+import { Calendar, Trash2, Dumbbell, Utensils, Scale, Plus, Award, Flame, Heart, Info, Clock } from 'lucide-react';
 import { FoodLogItem, WorkoutLogItem, BodyCompLogItem, UserProfile } from '../types';
+import { getFormattedDate } from '../utils';
 
 interface CalendarPageProps {
   profile: UserProfile;
   foodLogs: FoodLogItem[];
   workoutLogs: WorkoutLogItem[];
   bodyCompLogs: BodyCompLogItem[];
-  onOpenQuickAdd: (tab?: 'food' | 'workout' | 'weight') => void;
+  onOpenQuickAdd: (tab?: 'food' | 'workout' | 'weight' | 'bodycomp') => void;
   onDeleteFood: (id: string) => void;
   onDeleteWorkout: (id: string) => void;
+  selectedDateString: string;
+  setSelectedDateString: (dateStr: string) => void;
 }
 
 export default function CalendarPage({
@@ -19,39 +22,58 @@ export default function CalendarPage({
   bodyCompLogs,
   onOpenQuickAdd,
   onDeleteFood,
-  onDeleteWorkout
+  onDeleteWorkout,
+  selectedDateString,
+  setSelectedDateString
 }: CalendarPageProps) {
-  // June 2026 calendar helper
-  // June 2026 has 30 days. June 1, 2026 is a Monday.
-  // Since it starts on Monday, grid aligns perfectly with Monday-first system!
+  // Hardcoded for June 2026 to match local logs structure
   const totalDays = 30;
   const daysOfWeek = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
-  // Keep track of currently selected day of June 2026 (1-30)
-  const [selectedDay, setSelectedDay] = useState<number>(29); // Default to today (29th)
+  // Parse current day number from selectedDateString
+  const parts = selectedDateString.split('-');
+  const currentDay = parts[2] ? parseInt(parts[2]) : 29;
 
   const getDayDateString = (dayNum: number) => {
     const padded = dayNum.toString().padStart(2, '0');
     return `2026-06-${padded}`;
   };
 
-  const selectedDateStr = getDayDateString(selectedDay);
+  const handleSelectDay = (dayNum: number) => {
+    setSelectedDateString(getDayDateString(dayNum));
+  };
 
-  // Filter logs for selected day
-  const dailyFood = foodLogs.filter(item => item.dateString === selectedDateStr);
-  const dailyWorkouts = workoutLogs.filter(item => item.dateString === selectedDateStr);
-  const dailyBodyComp = bodyCompLogs.find(item => item.dateString === selectedDateStr);
+  // Filter logs for the currently selected day
+  const dailyFood = foodLogs.filter(item => item.dateString === selectedDateString);
+  const dailyWorkouts = workoutLogs.filter(item => item.dateString === selectedDateString);
+  const dailyBodyComp = bodyCompLogs.find(item => item.dateString === selectedDateString);
 
+  // Calculations for selected day
   const totalCaloriesOnDay = dailyFood.reduce((sum, item) => sum + item.calories, 0);
   const totalProteinOnDay = dailyFood.reduce((sum, item) => sum + item.protein, 0);
+  const totalCarbsOnDay = dailyFood.reduce((sum, item) => sum + item.carbs, 0);
+  const totalFatOnDay = dailyFood.reduce((sum, item) => sum + item.fat, 0);
+
   const totalBurnedOnDay = dailyWorkouts.reduce((sum, item) => sum + item.caloriesBurned, 0);
+  const gymWorkoutsCount = dailyWorkouts.filter(w => w.type === 'gym').length;
+  const cardioWorkoutsCount = dailyWorkouts.filter(w => w.type === 'cardio').length;
+
+  const netCaloriesOnDay = totalCaloriesOnDay - totalBurnedOnDay;
+  const deficitOnDay = profile.maintenanceTdee - totalCaloriesOnDay + totalBurnedOnDay;
+  const targetDeficit = profile.maintenanceTdee - profile.dailyCalorieTarget;
+
+  const calculateBMI = (w: number) => {
+    const h = profile.height || 175;
+    const heightM = h / 100;
+    return parseFloat((w / (heightM * heightM)).toFixed(1));
+  };
 
   return (
-    <div className="space-y-6 pb-20 animate-fade-in">
+    <div className="space-y-6 pb-20 animate-fade-in select-none">
       {/* Calendar Grid Section */}
       <section className="bg-white dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800 p-5 rounded-[24px] shadow-sm space-y-4">
         <div className="flex justify-between items-center px-1">
-          <span className="text-xs font-bold text-neutral-400 uppercase tracking-widest">Select Day</span>
+          <span className="text-xs font-bold text-neutral-400 uppercase tracking-widest">History Browser</span>
           <span className="text-xs font-extrabold text-primary dark:text-[#99f894]">June 2026</span>
         </div>
 
@@ -67,7 +89,7 @@ export default function CalendarPage({
           {Array.from({ length: totalDays }).map((_, idx) => {
             const dayNum = idx + 1;
             const dateStr = getDayDateString(dayNum);
-            const isSelected = selectedDay === dayNum;
+            const isSelected = currentDay === dayNum;
 
             // Check what logs exist on this date to draw small dot indicators
             const hasFood = foodLogs.some(l => l.dateString === dateStr);
@@ -77,7 +99,7 @@ export default function CalendarPage({
             return (
               <button
                 key={dayNum}
-                onClick={() => setSelectedDay(dayNum)}
+                onClick={() => handleSelectDay(dayNum)}
                 className={`aspect-square rounded-xl flex flex-col items-center justify-between p-1.5 transition-all relative ${
                   isSelected
                     ? 'bg-primary text-white shadow-md shadow-primary/20 scale-105 font-black'
@@ -103,10 +125,10 @@ export default function CalendarPage({
         </div>
       </section>
 
-      {/* Selected Day Overview Headers */}
+      {/* Selected Day Overview */}
       <div className="px-1 flex justify-between items-center">
         <h3 className="font-extrabold text-sm text-neutral-900 dark:text-white uppercase tracking-wider">
-          Daily Log: June {selectedDay}
+          Summary: June {currentDay}
         </h3>
         <button
           onClick={() => onOpenQuickAdd('food')}
@@ -116,48 +138,114 @@ export default function CalendarPage({
         </button>
       </div>
 
-      {/* Selected Day Analytics Metrics */}
-      <section className="grid grid-cols-3 gap-3">
-        {/* Consumed */}
-        <div className="bg-white dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800 rounded-2xl p-3.5 text-center shadow-sm">
-          <Utensils className="w-4 h-4 text-green-500 mx-auto mb-1.5" />
-          <p className="text-[9px] font-bold text-neutral-400 dark:text-neutral-500 uppercase tracking-widest">Consumed</p>
-          <p className="text-sm font-extrabold text-neutral-900 dark:text-white mt-1">{totalCaloriesOnDay} kcal</p>
+      {/* Selected Day Core Summary Cards Grid */}
+      <section className="grid grid-cols-2 gap-3.5">
+        {/* Food Summary Card */}
+        <div className="bg-white dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800 rounded-2xl p-4 shadow-sm space-y-2">
+          <div className="flex items-center gap-2">
+            <Utensils className="w-4 h-4 text-green-500" />
+            <span className="text-[10px] font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-wider">Food Summary</span>
+          </div>
+          <div className="space-y-1">
+            <p className="text-base font-black text-neutral-900 dark:text-white">{totalCaloriesOnDay} kcal</p>
+            <div className="grid grid-cols-3 gap-1 text-[9px] font-bold text-neutral-500 dark:text-neutral-400">
+              <div>
+                <span className="text-primary font-black">{totalProteinOnDay.toFixed(0)}g</span> P
+              </div>
+              <div>
+                <span>{totalCarbsOnDay.toFixed(0)}g</span> C
+              </div>
+              <div>
+                <span>{totalFatOnDay.toFixed(0)}g</span> F
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* Protein */}
-        <div className="bg-white dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800 rounded-2xl p-3.5 text-center shadow-sm">
-          <Award className="w-4 h-4 text-primary mx-auto mb-1.5" />
-          <p className="text-[9px] font-bold text-neutral-400 dark:text-neutral-500 uppercase tracking-widest">Protein</p>
-          <p className="text-sm font-extrabold text-neutral-900 dark:text-white mt-1">{totalProteinOnDay}g</p>
+        {/* Workout Summary Card */}
+        <div className="bg-white dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800 rounded-2xl p-4 shadow-sm space-y-2">
+          <div className="flex items-center gap-2">
+            <Dumbbell className="w-4 h-4 text-orange-500" />
+            <span className="text-[10px] font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-wider">Workout Summary</span>
+          </div>
+          <div className="space-y-1">
+            <p className="text-base font-black text-neutral-900 dark:text-white">-{totalBurnedOnDay} kcal</p>
+            <p className="text-[9px] font-bold text-neutral-500 dark:text-neutral-400">
+              {gymWorkoutsCount} Strength • {cardioWorkoutsCount} Cardio
+            </p>
+          </div>
         </div>
 
-        {/* Burned */}
-        <div className="bg-white dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800 rounded-2xl p-3.5 text-center shadow-sm">
-          <Dumbbell className="w-4 h-4 text-orange-500 mx-auto mb-1.5" />
-          <p className="text-[9px] font-bold text-neutral-400 dark:text-neutral-500 uppercase tracking-widest">Burned</p>
-          <p className="text-sm font-extrabold text-neutral-900 dark:text-white mt-1">{totalBurnedOnDay} kcal</p>
+        {/* Net Calories Card */}
+        <div className="bg-white dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800 rounded-2xl p-4 shadow-sm space-y-2">
+          <div className="flex items-center gap-2">
+            <Flame className="w-4 h-4 text-purple-500" />
+            <span className="text-[10px] font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-wider">Net Calories</span>
+          </div>
+          <div className="space-y-1">
+            <p className="text-base font-black text-neutral-900 dark:text-white">
+              {netCaloriesOnDay.toLocaleString()} <span className="text-[10px] font-medium text-neutral-400">kcal</span>
+            </p>
+            <p className="text-[9px] text-neutral-500 dark:text-neutral-400 font-bold">
+              Food: {totalCaloriesOnDay} - Active: {totalBurnedOnDay}
+            </p>
+          </div>
+        </div>
+
+        {/* Daily Deficit Card */}
+        <div className="bg-white dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800 rounded-2xl p-4 shadow-sm space-y-2">
+          <div className="flex items-center gap-2">
+            <Flame className="w-4 h-4 text-primary fill-primary/10" />
+            <span className="text-[10px] font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-wider">Daily Deficit</span>
+          </div>
+          <div className="space-y-1">
+            <p className="text-base font-black text-neutral-900 dark:text-white">
+              {deficitOnDay.toLocaleString()} <span className="text-[10px] font-medium text-neutral-400">kcal</span>
+            </p>
+            <p className="text-[9px] text-primary font-bold">
+              Goal: {targetDeficit} kcal
+            </p>
+          </div>
         </div>
       </section>
 
-      {/* List of details */}
-      <div className="space-y-3">
-        {/* Weight measurement */}
-        {dailyBodyComp && (
-          <div className="bg-blue-50/50 dark:bg-blue-950/10 border border-blue-100 dark:border-blue-900/30 rounded-2xl p-4 flex justify-between items-center shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-blue-100 dark:bg-blue-950/50 flex items-center justify-center text-blue-600 dark:text-blue-400">
-                <Scale className="w-4 h-4" />
-              </div>
-              <div>
-                <p className="text-xs font-bold text-neutral-800 dark:text-neutral-200">Weight & Composition</p>
-                <p className="text-[10px] text-neutral-500 dark:text-neutral-400">Body fat: {dailyBodyComp.bodyFatPercent}%</p>
-              </div>
+      {/* Body Composition Card if logged */}
+      {dailyBodyComp && (
+        <section className="bg-blue-50/40 dark:bg-blue-950/10 border border-blue-100 dark:border-blue-900/30 rounded-2xl p-4 shadow-sm">
+          <div className="flex justify-between items-center border-b border-blue-100/40 dark:border-blue-900/10 pb-3">
+            <div className="flex items-center gap-2">
+              <Scale className="w-4.5 h-4.5 text-blue-600 dark:text-blue-400" />
+              <span className="text-xs font-black text-blue-700 dark:text-blue-400 uppercase tracking-wider">Weight & Composition</span>
             </div>
-            <p className="text-sm font-black text-blue-700 dark:text-blue-400">{dailyBodyComp.weight} kg</p>
+            <span className="text-sm font-black text-blue-700 dark:text-blue-400">{dailyBodyComp.weight.toFixed(1)} kg</span>
           </div>
-        )}
+          <div className="grid grid-cols-5 gap-1.5 pt-3 text-[10px] font-bold text-neutral-500 dark:text-neutral-400 text-center">
+            <div>
+              <span className="block text-[8px] uppercase tracking-wider text-neutral-400">Fat</span>
+              <span className="text-blue-600 dark:text-blue-400 font-extrabold">{dailyBodyComp.bodyFatPercent.toFixed(1)}%</span>
+            </div>
+            <div>
+              <span className="block text-[8px] uppercase tracking-wider text-neutral-400">Muscle</span>
+              <span className="text-neutral-700 dark:text-neutral-300 font-extrabold">{dailyBodyComp.muscleMassKg?.toFixed(1) || '-'} kg</span>
+            </div>
+            <div>
+              <span className="block text-[8px] uppercase tracking-wider text-neutral-400">Visc</span>
+              <span className="text-neutral-700 dark:text-neutral-300 font-extrabold">{dailyBodyComp.visceralFat || '-'}</span>
+            </div>
+            <div>
+              <span className="block text-[8px] uppercase tracking-wider text-neutral-400">BMI</span>
+              <span className="text-neutral-700 dark:text-neutral-300 font-extrabold">{calculateBMI(dailyBodyComp.weight)}</span>
+            </div>
+            <div>
+              <span className="block text-[8px] uppercase tracking-wider text-neutral-400">BMR</span>
+              <span className="text-neutral-700 dark:text-neutral-300 font-extrabold">{dailyBodyComp.bmr || '-'}</span>
+            </div>
+          </div>
+        </section>
+      )}
 
+      {/* List of Details */}
+      <div className="space-y-3">
         {/* Food Details list */}
         {dailyFood.length > 0 && (
           <div className="bg-white dark:bg-neutral-900 rounded-[22px] border border-neutral-100 dark:border-neutral-800 p-4 shadow-sm space-y-3">
@@ -169,7 +257,7 @@ export default function CalendarPage({
                     <span className="text-lg leading-none">{food.emoji}</span>
                     <div>
                       <p className="text-xs font-bold text-neutral-800 dark:text-neutral-200">{food.name}</p>
-                      <p className="text-[10px] text-neutral-500 dark:text-neutral-400 font-medium">Protein: {food.protein}g • Carbs: {food.carbs}g</p>
+                      <p className="text-[10px] text-neutral-500 dark:text-neutral-400 font-medium">Protein: {food.protein}g • Carbs: {food.carbs}g • Fat: {food.fat}g</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2.5">

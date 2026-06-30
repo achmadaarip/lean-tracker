@@ -7,7 +7,8 @@ import {
   INITIAL_WORKOUT_LOGS,
   INITIAL_BODY_COMP,
   INITIAL_FOOD_DB,
-  INITIAL_MEAL_PRESETS_CLEANED
+  INITIAL_MEAL_PRESETS_CLEANED,
+  getTodayDateString
 } from './utils';
 
 // Import modular pages
@@ -18,13 +19,17 @@ import WorkoutLog from './components/WorkoutLog';
 import CalendarPage from './components/CalendarPage';
 import ProgressAnalytics from './components/ProgressAnalytics';
 import SettingsPage from './components/SettingsPage';
+import BodyCompositionPage from './components/BodyCompositionPage';
 import QuickAddModal from './components/QuickAddModal';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'home' | 'food' | 'workouts' | 'progress' | 'calendar' | 'settings'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'food' | 'workouts' | 'progress' | 'calendar' | 'settings' | 'bodycomp'>('home');
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [quickAddInitialTab, setQuickAddInitialTab] = useState<'menu' | 'food' | 'workout' | 'weight' | 'bodycomp'>('menu');
   const [quickAddInitialMealType, setQuickAddInitialMealType] = useState<MealType>('breakfast');
+
+  // Unified global selected date string - Defaults to 2026-06-29 for rich initial mock logs data view
+  const [selectedDateString, setSelectedDateString] = useState('2026-06-29');
 
   const [activeTheme, setActiveTheme] = useState<'light' | 'dark' | 'system'>(() => {
     const saved = localStorage.getItem('lean_active_theme');
@@ -59,6 +64,26 @@ export default function App() {
       return () => mediaQuery.removeEventListener('change', handleChange);
     }
   }, [activeTheme]);
+
+  // Automatic midnight day rollover: automatically switches to today's date when a new day begins
+  useEffect(() => {
+    const checkRollover = () => {
+      const now = new Date();
+      const todayStr = getTodayDateString();
+
+      // Calculate milliseconds until next local midnight (00:00:00)
+      const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0);
+      const msToMidnight = midnight.getTime() - now.getTime();
+
+      const timer = setTimeout(() => {
+        setSelectedDateString(getTodayDateString());
+      }, msToMidnight);
+
+      return () => clearTimeout(timer);
+    };
+
+    checkRollover();
+  }, [selectedDateString]);
 
   // Core State with Local Storage fallback
   const [profile, setProfile] = useState<UserProfile>(() => {
@@ -116,36 +141,43 @@ export default function App() {
     localStorage.setItem('lean_body_comp_logs', JSON.stringify(bodyCompLogs));
   }, [bodyCompLogs]);
 
-  // State Modification Handlers
-  const handleAddFood = (food: Omit<FoodLogItem, 'id' | 'dateString'>) => {
+  // State Modification Handlers with active date linkage
+  const handleAddFood = (food: Omit<FoodLogItem, 'id' | 'dateString'> & { dateString?: string }) => {
     const newItem: FoodLogItem = {
       ...food,
       id: `f_${Date.now()}`,
-      dateString: '2026-06-29' // Persisting current mock date for unified display
+      dateString: food.dateString || selectedDateString
     };
     setFoodLogs((prev) => [...prev, newItem]);
   };
 
-  const handleAddWorkout = (workout: Omit<WorkoutLogItem, 'id' | 'dateString'>) => {
+  const handleAddWorkout = (workout: Omit<WorkoutLogItem, 'id' | 'dateString'> & { dateString?: string }) => {
     const newItem: WorkoutLogItem = {
       ...workout,
       id: `w_${Date.now()}`,
-      dateString: '2026-06-29'
+      dateString: workout.dateString || selectedDateString
     };
     setWorkoutLogs((prev) => [...prev, newItem]);
   };
 
-  const handleAddBodyComp = (comp: Omit<BodyCompLogItem, 'id' | 'dateString'>) => {
+  const handleAddBodyComp = (comp: Omit<BodyCompLogItem, 'id' | 'dateString'> & { dateString?: string }) => {
+    const targetDate = comp.dateString || selectedDateString;
     const newItem: BodyCompLogItem = {
       ...comp,
       id: `bc_${Date.now()}`,
-      dateString: '2026-06-29'
+      dateString: targetDate
     };
-    // If a log for today already exists, overwrite it, otherwise prepend
+    // Overwrite if same date, otherwise prepend
     setBodyCompLogs((prev) => {
-      const filtered = prev.filter((log) => log.dateString !== '2026-06-29');
+      const filtered = prev.filter((log) => log.dateString !== targetDate);
       return [newItem, ...filtered];
     });
+
+    // Update profile currentWeight
+    setProfile(prev => ({
+      ...prev,
+      currentWeight: comp.weight
+    }));
   };
 
   const handleDeleteFood = (id: string) => {
@@ -164,6 +196,7 @@ export default function App() {
       setBodyCompLogs(INITIAL_BODY_COMP);
       setFoodDatabase(INITIAL_FOOD_DB);
       setMealPresets(INITIAL_MEAL_PRESETS_CLEANED);
+      setSelectedDateString('2026-06-29');
       setActiveTab('home');
     }
   };
@@ -185,6 +218,8 @@ export default function App() {
           activeTab={activeTab}
           onNavigate={setActiveTab}
           streakCount={profile.streakCount}
+          profile={profile}
+          selectedDateString={selectedDateString}
         />
 
         {/* Dynamic Screen Stage */}
@@ -199,12 +234,13 @@ export default function App() {
               onOpenQuickAdd={openQuickAdd}
               onDeleteFood={handleDeleteFood}
               onDeleteWorkout={handleDeleteWorkout}
+              selectedDateString={selectedDateString}
             />
           )}
           {activeTab === 'food' && (
             <FoodLog
               profile={profile}
-              foodLogs={foodLogs}
+              foodLogs={foodLogs.filter(item => item.dateString === selectedDateString)}
               onOpenQuickAdd={openQuickAdd}
               onDeleteFood={handleDeleteFood}
             />
@@ -212,7 +248,7 @@ export default function App() {
           {activeTab === 'workouts' && (
             <WorkoutLog
               profile={profile}
-              workoutLogs={workoutLogs}
+              workoutLogs={workoutLogs.filter(item => item.dateString === selectedDateString)}
               onOpenQuickAdd={openQuickAdd}
               onDeleteWorkout={handleDeleteWorkout}
             />
@@ -226,6 +262,8 @@ export default function App() {
               onOpenQuickAdd={openQuickAdd}
               onDeleteFood={handleDeleteFood}
               onDeleteWorkout={handleDeleteWorkout}
+              selectedDateString={selectedDateString}
+              setSelectedDateString={setSelectedDateString}
             />
           )}
           {activeTab === 'progress' && (
@@ -241,8 +279,6 @@ export default function App() {
               profile={profile}
               onUpdateProfile={setProfile}
               onResetData={handleResetData}
-              activeTheme={activeTheme}
-              onThemeChange={setActiveTheme}
               bodyCompLogs={bodyCompLogs}
               onAddBodyComp={handleAddBodyComp}
               onUpdateFoodLogs={setFoodLogs}
@@ -252,6 +288,16 @@ export default function App() {
               onUpdateFoodDatabase={setFoodDatabase}
               mealPresets={mealPresets}
               onUpdateMealPresets={setMealPresets}
+              onNavigate={setActiveTab}
+            />
+          )}
+          {activeTab === 'bodycomp' && (
+            <BodyCompositionPage
+              profile={profile}
+              bodyCompLogs={bodyCompLogs}
+              onAddBodyComp={handleAddBodyComp}
+              onUpdateBodyCompLogs={setBodyCompLogs}
+              onNavigate={setActiveTab}
             />
           )}
         </main>
@@ -286,7 +332,7 @@ export default function App() {
               <Utensils className="w-[22px] h-[22px]" />
             </button>
 
-            {/* Elevated Floating Quick Logger Button - Centered & Floats above Nav by ~16-20px */}
+            {/* Elevated Floating Quick Logger Button */}
             <div className="relative -top-5">
               <button
                 onClick={() => openQuickAdd()}

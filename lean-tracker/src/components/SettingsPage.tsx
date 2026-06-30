@@ -18,8 +18,10 @@ import {
   Sparkles, 
   Utensils, 
   FileText,
-  ChevronDown,
-  Eye
+  Eye,
+  User,
+  ChevronRight,
+  Sparkle
 } from 'lucide-react';
 import { UserProfile, FoodLogItem, WorkoutLogItem, BodyCompLogItem, FoodDbItem, MealPreset, MealPresetItem } from '../types';
 
@@ -36,8 +38,7 @@ interface SettingsPageProps {
   onUpdateFoodDatabase: (db: FoodDbItem[]) => void;
   mealPresets: MealPreset[];
   onUpdateMealPresets: (presets: MealPreset[]) => void;
-  activeTheme?: 'light' | 'dark';
-  onThemeChange?: (theme: 'light' | 'dark') => void;
+  onNavigate: (tab: 'home' | 'food' | 'workouts' | 'progress' | 'calendar' | 'settings' | 'bodycomp') => void;
 }
 
 export default function SettingsPage({
@@ -53,8 +54,7 @@ export default function SettingsPage({
   onUpdateFoodDatabase,
   mealPresets,
   onUpdateMealPresets,
-  activeTheme,
-  onThemeChange
+  onNavigate
 }: SettingsPageProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -62,18 +62,12 @@ export default function SettingsPage({
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileName, setProfileName] = useState(profile.name);
   const [profileEmail, setProfileEmail] = useState(profile.email);
-  const [profileHeight, setProfileHeight] = useState((profile.height || 175).toString());
-  const [profileTargetWeight, setProfileTargetWeight] = useState(profile.targetWeight.toString());
-  const [profileActivityLevel, setProfileActivityLevel] = useState(profile.activityLevel || 'Moderately Active');
 
   const handleSaveProfile = () => {
     onUpdateProfile({
       ...profile,
       name: profileName,
-      email: profileEmail,
-      height: parseInt(profileHeight) || 175,
-      targetWeight: parseFloat(profileTargetWeight) || 68.0,
-      activityLevel: profileActivityLevel
+      email: profileEmail
     });
     setIsEditingProfile(false);
   };
@@ -82,20 +76,38 @@ export default function SettingsPage({
   const [isEditingGoals, setIsEditingGoals] = useState(false);
   const [editedCalories, setEditedCalories] = useState(profile.dailyCalorieTarget.toString());
   const [editedProtein, setEditedProtein] = useState(profile.dailyProteinTarget.toString());
-  const [editedWeightTarget, setEditedWeightTarget] = useState(profile.targetWeight.toString());
-  const [editedBodyFatTarget, setEditedBodyFatTarget] = useState(profile.targetBodyFat.toString());
-  const [editedTdee, setEditedTdee] = useState(profile.maintenanceTdee.toString());
+  const [editedCarbs, setEditedCarbs] = useState((profile.dailyCarbsTarget || 200).toString());
+  const [editedFat, setEditedFat] = useState((profile.dailyFatTarget || 65).toString());
 
   const handleSaveGoals = () => {
     onUpdateProfile({
       ...profile,
       dailyCalorieTarget: parseInt(editedCalories) || 1600,
       dailyProteinTarget: parseInt(editedProtein) || 150,
-      targetWeight: parseFloat(editedWeightTarget) || 68.0,
-      targetBodyFat: parseFloat(editedBodyFatTarget) || 12,
-      maintenanceTdee: parseInt(editedTdee) || 2200
+      dailyCarbsTarget: parseInt(editedCarbs) || 200,
+      dailyFatTarget: parseInt(editedFat) || 65
     });
     setIsEditingGoals(false);
+  };
+
+  // --- CURRENT BODY STATE ---
+  const [isEditingBody, setIsEditingBody] = useState(false);
+  const [bodyHeight, setBodyHeight] = useState((profile.height || 175).toString());
+  const [bodyCurrentWeight, setBodyCurrentWeight] = useState((profile.currentWeight || 70.5).toString());
+  const [bodyAge, setBodyAge] = useState((profile.age || 25).toString());
+  const [bodyGender, setBodyGender] = useState(profile.gender || 'Male');
+  const [bodyActivityLevel, setBodyActivityLevel] = useState(profile.activityLevel || 'Moderately Active');
+
+  const handleSaveBody = () => {
+    onUpdateProfile({
+      ...profile,
+      height: parseInt(bodyHeight) || 175,
+      currentWeight: parseFloat(bodyCurrentWeight) || 70.5,
+      age: parseInt(bodyAge) || 25,
+      gender: bodyGender,
+      activityLevel: bodyActivityLevel
+    });
+    setIsEditingBody(false);
   };
 
   // --- FOOD DATABASE STATE ---
@@ -104,49 +116,63 @@ export default function SettingsPage({
   const [editingFoodId, setEditingFoodId] = useState<string | null>(null);
 
   // Food Form Fields
+  const [foodEmoji, setFoodEmoji] = useState('🍎');
   const [foodName, setFoodName] = useState('');
-  const [foodEmoji, setFoodEmoji] = useState('🍗');
-  const [foodUnit, setFoodUnit] = useState('g');
   const [foodBaseQty, setFoodBaseQty] = useState('100');
-  const [foodCalories, setFoodCalories] = useState('165');
-  const [foodProtein, setFoodProtein] = useState('31');
-  const [foodCarbs, setFoodCarbs] = useState('0');
-  const [foodFat, setFoodFat] = useState('3.6');
+  const [foodUnit, setFoodUnit] = useState('g');
+  const [foodCalories, setFoodCalories] = useState('150');
+  const [foodProtein, setFoodProtein] = useState('10');
+  const [foodCarbs, setFoodCarbs] = useState('15');
+  const [foodFat, setFoodFat] = useState('2');
 
-  // Filter food database based on query
-  const filteredFoods = useMemo(() => {
-    if (!foodSearchQuery.trim()) return foodDatabase;
-    return foodDatabase.filter(food => 
-      food.name.toLowerCase().includes(foodSearchQuery.toLowerCase())
-    );
-  }, [foodDatabase, foodSearchQuery]);
+  // --- MEAL PRESET STATE ---
+  const [isCreatingPreset, setIsCreatingPreset] = useState(false);
+  const [presetName, setPresetName] = useState('');
+  const [presetCategory, setPresetCategory] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>('lunch');
+  const [presetSearch, setPresetSearch] = useState('');
+  const [selectedPresetItems, setSelectedPresetItems] = useState<{ foodId: string; quantity: number }[]>([]);
+
+  // Reset Food Form Helpers
+  const resetFoodForm = () => {
+    setFoodEmoji('🍎');
+    setFoodName('');
+    setFoodBaseQty('100');
+    setFoodUnit('g');
+    setFoodCalories('150');
+    setFoodProtein('10');
+    setFoodCarbs('15');
+    setFoodFat('2');
+    setIsAddingFood(false);
+    setEditingFoodId(null);
+  };
 
   const handleAddFood = (e: React.FormEvent) => {
     e.preventDefault();
     if (!foodName.trim()) return;
 
     const newFood: FoodDbItem = {
-      id: `f_db_${Date.now()}`,
-      name: foodName,
+      id: `food_${Date.now()}`,
       emoji: foodEmoji,
-      unit: foodUnit,
+      name: foodName,
       baseQty: parseFloat(foodBaseQty) || 100,
+      unit: foodUnit,
       calories: parseInt(foodCalories) || 0,
       protein: parseFloat(foodProtein) || 0,
       carbs: parseFloat(foodCarbs) || 0,
-      fat: parseFloat(foodFat) || 0
+      fat: parseFloat(foodFat) || 0,
+      isCustom: true
     };
 
-    onUpdateFoodDatabase([...foodDatabase, newFood]);
+    onUpdateFoodDatabase([newFood, ...foodDatabase]);
     resetFoodForm();
   };
 
   const handleStartEditFood = (food: FoodDbItem) => {
     setEditingFoodId(food.id);
-    setFoodName(food.name);
     setFoodEmoji(food.emoji);
-    setFoodUnit(food.unit);
+    setFoodName(food.name);
     setFoodBaseQty(food.baseQty.toString());
+    setFoodUnit(food.unit);
     setFoodCalories(food.calories.toString());
     setFoodProtein(food.protein.toString());
     setFoodCarbs(food.carbs.toString());
@@ -158,21 +184,21 @@ export default function SettingsPage({
     e.preventDefault();
     if (!editingFoodId || !foodName.trim()) return;
 
-    const updated = foodDatabase.map(f => {
-      if (f.id === editingFoodId) {
+    const updated = foodDatabase.map((food) => {
+      if (food.id === editingFoodId) {
         return {
-          ...f,
-          name: foodName,
+          ...food,
           emoji: foodEmoji,
-          unit: foodUnit,
+          name: foodName,
           baseQty: parseFloat(foodBaseQty) || 100,
+          unit: foodUnit,
           calories: parseInt(foodCalories) || 0,
           protein: parseFloat(foodProtein) || 0,
           carbs: parseFloat(foodCarbs) || 0,
           fat: parseFloat(foodFat) || 0
         };
       }
-      return f;
+      return food;
     });
 
     onUpdateFoodDatabase(updated);
@@ -180,91 +206,70 @@ export default function SettingsPage({
   };
 
   const handleDeleteFood = (id: string) => {
-    if (window.confirm("Are you sure you want to delete this food item from the library? Future logged meals referencing this food may no longer calculate nutrition values correctly.")) {
+    if (window.confirm("Delete this food item? This will remove it from future quick logs.")) {
       onUpdateFoodDatabase(foodDatabase.filter(f => f.id !== id));
     }
   };
 
-  const resetFoodForm = () => {
-    setEditingFoodId(null);
-    setIsAddingFood(false);
-    setFoodName('');
-    setFoodEmoji('🍗');
-    setFoodUnit('g');
-    setFoodBaseQty('100');
-    setFoodCalories('165');
-    setFoodProtein('31');
-    setFoodCarbs('0');
-    setFoodFat('3.6');
+  // Filter food database for display
+  const filteredFoods = useMemo(() => {
+    return foodDatabase.filter(food => 
+      food.name.toLowerCase().includes(foodSearchQuery.toLowerCase())
+    );
+  }, [foodDatabase, foodSearchQuery]);
+
+  // --- PRESETS HELPERS ---
+  const handleAddPresetItem = (foodId: string) => {
+    setSelectedPresetItems(prev => {
+      if (prev.some(item => item.foodId === foodId)) return prev;
+      return [...prev, { foodId, quantity: 100 }];
+    });
   };
 
-
-  // --- QUICK MEAL PRESETS STATE ---
-  const [isAddingPreset, setIsAddingPreset] = useState(false);
-  const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
-  const [presetName, setPresetName] = useState('');
-  
-  // Custom rows inside the builder
-  const [presetRows, setPresetRows] = useState<{ foodId: string; quantity: string }[]>([
-    { foodId: foodDatabase[0]?.id || '', quantity: '1' }
-  ]);
-
-  const handleAddRow = () => {
-    setPresetRows([...presetRows, { foodId: foodDatabase[0]?.id || '', quantity: '1' }]);
+  const handleRemovePresetItem = (foodId: string) => {
+    setSelectedPresetItems(prev => prev.filter(item => item.foodId !== foodId));
   };
 
-  const handleRemoveRow = (index: number) => {
-    setPresetRows(presetRows.filter((_, i) => i !== index));
-  };
-
-  const handleRowChange = (index: number, field: 'foodId' | 'quantity', value: string) => {
-    setPresetRows(presetRows.map((row, i) => {
-      if (i === index) {
-        return { ...row, [field]: value };
-      }
-      return row;
+  const handleUpdatePresetItemQty = (foodId: string, qty: number) => {
+    setSelectedPresetItems(prev => prev.map(item => {
+      if (item.foodId === foodId) return { ...item, quantity: Math.max(1, qty) };
+      return item;
     }));
   };
 
-  const handleSavePreset = (e: React.FormEvent) => {
+  const handleCreatePreset = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!presetName.trim()) return;
+    if (!presetName.trim() || selectedPresetItems.length === 0) return;
 
-    const items: MealPresetItem[] = presetRows
-      .filter(row => row.foodId && parseFloat(row.quantity) > 0)
-      .map(row => ({
-        foodId: row.foodId,
-        quantity: parseFloat(row.quantity) || 1
-      }));
-
-    if (editingPresetId) {
-      const updated = mealPresets.map(p => {
-        if (p.id === editingPresetId) {
-          return { ...p, name: presetName, items };
-        }
-        return p;
-      });
-      onUpdateMealPresets(updated);
-    } else {
-      const newPreset: MealPreset = {
-        id: `p_${Date.now()}`,
-        name: presetName,
-        items
+    const items: MealPresetItem[] = selectedPresetItems.map(item => {
+      const food = foodDatabase.find(f => f.id === item.foodId)!;
+      return {
+        foodId: item.foodId,
+        quantityGrams: item.quantity,
+        name: food.name,
+        calories: Math.round((food.calories * item.quantity) / food.baseQty),
+        protein: parseFloat(((food.protein * item.quantity) / food.baseQty).toFixed(1)),
+        carbs: parseFloat(((food.carbs * item.quantity) / food.baseQty).toFixed(1)),
+        fat: parseFloat(((food.fat * item.quantity) / food.baseQty).toFixed(1))
       };
-      onUpdateMealPresets([...mealPresets, newPreset]);
-    }
+    });
 
-    resetPresetForm();
-  };
+    const totalCals = items.reduce((sum, item) => sum + item.calories, 0);
+    const totalProtein = items.reduce((sum, item) => sum + item.protein, 0);
 
-  const handleStartEditPreset = (preset: MealPreset) => {
-    setEditingPresetId(preset.id);
-    setPresetName(preset.name);
-    setPresetRows(preset.items.map(item => ({
-      foodId: item.foodId,
-      quantity: item.quantity.toString()
-    })));
-    setIsAddingPreset(false);
+    const newPreset: MealPreset = {
+      id: `preset_${Date.now()}`,
+      name: presetName,
+      category: presetCategory,
+      items,
+      totalCalories: totalCals,
+      totalProtein: totalProtein
+    };
+
+    onUpdateMealPresets([newPreset, ...mealPresets]);
+    setIsCreatingPreset(false);
+    setPresetName('');
+    setSelectedPresetItems([]);
   };
 
   const handleDeletePreset = (id: string) => {
@@ -273,80 +278,75 @@ export default function SettingsPage({
     }
   };
 
-  const resetPresetForm = () => {
-    setEditingPresetId(null);
-    setIsAddingPreset(false);
-    setPresetName('');
-    setPresetRows([{ foodId: foodDatabase[0]?.id || '', quantity: '1' }]);
-  };
+  const presetFoodOptions = useMemo(() => {
+    return foodDatabase.filter(food => 
+      food.name.toLowerCase().includes(presetSearch.toLowerCase()) &&
+      !selectedPresetItems.some(item => item.foodId === food.id)
+    );
+  }, [foodDatabase, presetSearch, selectedPresetItems]);
 
-
-  // --- EXPORT / IMPORT HANDLERS ---
+  // --- DATA SYNC BACKUP/RESTORE ---
   const handleExportData = () => {
-    try {
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({
-        profile,
-        foodLogs: localStorage.getItem('lean_food_logs') ? JSON.parse(localStorage.getItem('lean_food_logs')!) : [],
-        workoutLogs: localStorage.getItem('lean_workout_logs') ? JSON.parse(localStorage.getItem('lean_workout_logs')!) : [],
-        bodyCompLogs: localStorage.getItem('lean_body_comp_logs') ? JSON.parse(localStorage.getItem('lean_body_comp_logs')!) : [],
-        foodDatabase,
-        mealPresets
-      }, null, 2));
-      const downloadAnchor = document.createElement('a');
-      downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", `lean_recomp_backup_${new Date().toISOString().slice(0, 10)}.json`);
-      document.body.appendChild(downloadAnchor);
-      downloadAnchor.click();
-      downloadAnchor.remove();
-    } catch (e) {
-      alert("Failed to export data.");
-    }
+    const data = {
+      profile,
+      foodDatabase,
+      mealPresets,
+      foodLogs: JSON.parse(localStorage.getItem('lean_food_logs') || '[]'),
+      workoutLogs: JSON.parse(localStorage.getItem('lean_workout_logs') || '[]'),
+      bodyCompLogs: JSON.parse(localStorage.getItem('lean_body_comp') || '[]')
+    };
+
+    const str = JSON.stringify(data, null, 2);
+    const blob = new Blob([str], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `lean_tracker_backup_${new Date().toISOString().slice(0,10)}.json`;
+    link.click();
   };
 
   const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const fileReader = new FileReader();
-    if (e.target.files && e.target.files[0]) {
-      fileReader.readAsText(e.target.files[0], "UTF-8");
-      fileReader.onload = (event) => {
-        try {
-          const parsed = JSON.parse(event.target?.result as string);
-          if (parsed.profile) {
-            onUpdateProfile(parsed.profile);
-            // Sync current profile editing states
-            setProfileName(parsed.profile.name);
-            setProfileEmail(parsed.profile.email);
-            setProfileHeight((parsed.profile.height || 175).toString());
-            setProfileTargetWeight(parsed.profile.targetWeight.toString());
-            setProfileActivityLevel(parsed.profile.activityLevel || 'Moderately Active');
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-            // Sync goals editing states
-            setEditedCalories(parsed.profile.dailyCalorieTarget.toString());
-            setEditedProtein(parsed.profile.dailyProteinTarget.toString());
-            setEditedWeightTarget(parsed.profile.targetWeight.toString());
-            setEditedBodyFatTarget(parsed.profile.targetBodyFat.toString());
-            setEditedTdee(parsed.profile.maintenanceTdee.toString());
-          }
-          if (parsed.foodLogs) onUpdateFoodLogs(parsed.foodLogs);
-          if (parsed.workoutLogs) onUpdateWorkoutLogs(parsed.workoutLogs);
-          if (parsed.bodyCompLogs) onUpdateBodyCompLogs(parsed.bodyCompLogs);
-          if (parsed.foodDatabase) onUpdateFoodDatabase(parsed.foodDatabase);
-          if (parsed.mealPresets) onUpdateMealPresets(parsed.mealPresets);
-          alert("Recomposition data successfully restored!");
-        } catch (err) {
-          alert("Error parsing backup file. Please make sure it is a valid JSON file exported from this app.");
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const parsed = JSON.parse(event.target?.result as string);
+        if (parsed.profile) {
+          onUpdateProfile(parsed.profile);
         }
-      };
-    }
+        if (parsed.foodDatabase) {
+          onUpdateFoodDatabase(parsed.foodDatabase);
+        }
+        if (parsed.mealPresets) {
+          onUpdateMealPresets(parsed.mealPresets);
+        }
+        if (parsed.foodLogs) {
+          localStorage.setItem('lean_food_logs', JSON.stringify(parsed.foodLogs));
+          onUpdateFoodLogs(parsed.foodLogs);
+        }
+        if (parsed.workoutLogs) {
+          localStorage.setItem('lean_workout_logs', JSON.stringify(parsed.workoutLogs));
+          onUpdateWorkoutLogs(parsed.workoutLogs);
+        }
+        if (parsed.bodyCompLogs) {
+          localStorage.setItem('lean_body_comp', JSON.stringify(parsed.bodyCompLogs));
+          onUpdateBodyCompLogs(parsed.bodyCompLogs);
+        }
+        alert("Backup file successfully imported! All settings and history logs updated.");
+      } catch (err) {
+        alert("Invalid backup file format. Please import a valid JSON backup file.");
+      }
+    };
+    reader.readAsText(file);
   };
 
   return (
     <div className="space-y-8 pb-32 animate-fade-in select-none">
       
-      {/* ========================================================
-          EDITABLE PROFILE CARD (REPLACES Redundant Settings Title & Avatar)
-          ======================================================== */}
+      {/* 1. PROFILE SECTION */}
       <section className="bg-white dark:bg-neutral-900 rounded-[28px] border border-neutral-100 dark:border-neutral-800 shadow-[0_2px_12px_rgba(0,0,0,0.015)] p-6 space-y-4">
-        
         {!isEditingProfile ? (
           <div className="flex justify-between items-start">
             <div className="space-y-1">
@@ -355,29 +355,12 @@ export default function SettingsPage({
               <p className="text-[11px] text-neutral-400 dark:text-neutral-500 mt-2">
                 Manage your personal information.
               </p>
-              
-              <div className="flex flex-wrap gap-2 pt-3">
-                <span className="text-[10px] font-bold bg-neutral-50 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 px-2.5 py-1 rounded-full border border-neutral-100 dark:border-neutral-800">
-                  📏 Height: {profile.height || 175} cm
-                </span>
-                <span className="text-[10px] font-bold bg-neutral-50 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 px-2.5 py-1 rounded-full border border-neutral-100 dark:border-neutral-800">
-                  🎯 Target Weight: {profile.targetWeight.toFixed(1)} kg
-                </span>
-                {profile.activityLevel && (
-                  <span className="text-[10px] font-bold bg-neutral-50 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 px-2.5 py-1 rounded-full border border-neutral-100 dark:border-neutral-800">
-                    ⚡ {profile.activityLevel}
-                  </span>
-                )}
-              </div>
             </div>
 
             <button
               onClick={() => {
                 setProfileName(profile.name);
                 setProfileEmail(profile.email);
-                setProfileHeight((profile.height || 175).toString());
-                setProfileTargetWeight(profile.targetWeight.toString());
-                setProfileActivityLevel(profile.activityLevel || 'Moderately Active');
                 setIsEditingProfile(true);
               }}
               className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-primary dark:text-[#99f894] bg-primary/5 dark:bg-[#99f894]/5 hover:bg-primary/10 dark:hover:bg-[#99f894]/10 rounded-full border border-primary/10 transition-all cursor-pointer"
@@ -388,20 +371,20 @@ export default function SettingsPage({
         ) : (
           <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <span className="text-xs font-black uppercase text-primary tracking-wider">Edit Profile Card</span>
+              <span className="text-xs font-black uppercase text-primary tracking-wider">Edit Profile</span>
               <button onClick={() => setIsEditingProfile(false)} className="p-1 hover:bg-neutral-50 dark:hover:bg-neutral-800 rounded-full text-neutral-400">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3">
               <div className="space-y-1">
                 <label className="text-[10px] font-black uppercase text-neutral-400 tracking-wider">Full Name</label>
                 <input
                   type="text"
                   value={profileName}
                   onChange={(e) => setProfileName(e.target.value)}
-                  className="w-full px-3 py-2 text-xs font-bold bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl focus:outline-none"
+                  className="w-full px-3 py-2 text-xs font-bold bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl focus:outline-none text-neutral-900 dark:text-white"
                 />
               </div>
               <div className="space-y-1">
@@ -410,43 +393,8 @@ export default function SettingsPage({
                   type="email"
                   value={profileEmail}
                   onChange={(e) => setProfileEmail(e.target.value)}
-                  className="w-full px-3 py-2 text-xs font-bold bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl focus:outline-none"
+                  className="w-full px-3 py-2 text-xs font-bold bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl focus:outline-none text-neutral-900 dark:text-white"
                 />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2">
-              <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase text-neutral-400 tracking-wider">Height (cm)</label>
-                <input
-                  type="number"
-                  value={profileHeight}
-                  onChange={(e) => setProfileHeight(e.target.value)}
-                  className="w-full px-3 py-2 text-xs font-bold bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl focus:outline-none"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase text-neutral-400 tracking-wider">Target Weight</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={profileTargetWeight}
-                  onChange={(e) => setProfileTargetWeight(e.target.value)}
-                  className="w-full px-3 py-2 text-xs font-bold bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl focus:outline-none"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase text-neutral-400 tracking-wider">Activity Level</label>
-                <select
-                  value={profileActivityLevel}
-                  onChange={(e) => setProfileActivityLevel(e.target.value)}
-                  className="w-full px-3 py-2 text-xs font-bold bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl focus:outline-none appearance-none"
-                >
-                  <option value="Sedentary">Sedentary</option>
-                  <option value="Lightly Active">Lightly Active</option>
-                  <option value="Moderately Active">Moderately Active</option>
-                  <option value="Very Active">Very Active</option>
-                </select>
               </div>
             </div>
 
@@ -468,9 +416,7 @@ export default function SettingsPage({
         )}
       </section>
 
-      {/* ========================================================
-          GOALS & TARGETS SECTION
-          ======================================================== */}
+      {/* 2. GOALS & TARGETS SECTION */}
       <section className="space-y-3">
         <div className="px-1 flex items-center justify-between">
           <span className="text-[10px] font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-widest">Goals & Targets</span>
@@ -480,9 +426,8 @@ export default function SettingsPage({
               onClick={() => {
                 setEditedCalories(profile.dailyCalorieTarget.toString());
                 setEditedProtein(profile.dailyProteinTarget.toString());
-                setEditedWeightTarget(profile.targetWeight.toString());
-                setEditedBodyFatTarget(profile.targetBodyFat.toString());
-                setEditedTdee(profile.maintenanceTdee.toString());
+                setEditedCarbs((profile.dailyCarbsTarget || 200).toString());
+                setEditedFat((profile.dailyFatTarget || 65).toString());
                 setIsEditingGoals(true);
               }}
               className="text-xs font-bold text-primary dark:text-[#99f894] hover:underline cursor-pointer"
@@ -498,7 +443,7 @@ export default function SettingsPage({
         </div>
 
         <div className="bg-white dark:bg-neutral-900 rounded-[24px] border border-neutral-100 dark:border-neutral-800 shadow-sm overflow-hidden divide-y divide-neutral-100 dark:divide-neutral-800/60">
-          {/* Daily Calories Target */}
+          {/* Daily Calories */}
           <div className="flex items-center justify-between p-4">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 bg-primary/10 rounded-xl flex items-center justify-center text-primary">
@@ -506,7 +451,7 @@ export default function SettingsPage({
               </div>
               <div className="flex flex-col">
                 <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200">Daily Calories Target</span>
-                <span className="text-[10px] text-neutral-400 font-medium">Daily energy budget</span>
+                <span className="text-[10px] text-neutral-400 font-medium">Daily budget for fat loss</span>
               </div>
             </div>
             <div>
@@ -516,7 +461,7 @@ export default function SettingsPage({
                     type="number"
                     value={editedCalories}
                     onChange={(e) => setEditedCalories(e.target.value)}
-                    className="w-20 px-2 py-1 text-center text-xs font-bold bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 rounded-lg"
+                    className="w-20 px-2 py-1 text-center text-xs font-bold bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 rounded-lg text-neutral-900 dark:text-white"
                   />
                   <span className="text-[10px] font-bold text-neutral-400">kcal</span>
                 </div>
@@ -534,7 +479,7 @@ export default function SettingsPage({
               </div>
               <div className="flex flex-col">
                 <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200">Daily Protein Target</span>
-                <span className="text-[10px] text-neutral-400 font-medium">Muscle mass protection target</span>
+                <span className="text-[10px] text-neutral-400 font-medium">To protect and build lean muscle</span>
               </div>
             </div>
             <div>
@@ -544,7 +489,7 @@ export default function SettingsPage({
                     type="number"
                     value={editedProtein}
                     onChange={(e) => setEditedProtein(e.target.value)}
-                    className="w-20 px-2 py-1 text-center text-xs font-bold bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 rounded-lg"
+                    className="w-20 px-2 py-1 text-center text-xs font-bold bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 rounded-lg text-neutral-900 dark:text-white"
                   />
                   <span className="text-[10px] font-bold text-neutral-400">g</span>
                 </div>
@@ -554,15 +499,15 @@ export default function SettingsPage({
             </div>
           </div>
 
-          {/* Target Weight */}
+          {/* Carbs Target */}
           <div className="flex items-center justify-between p-4">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 bg-primary/10 rounded-xl flex items-center justify-center text-primary">
-                <Scale className="w-4.5 h-4.5" />
+                <BookOpen className="w-4.5 h-4.5" />
               </div>
               <div className="flex flex-col">
-                <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200">Target Weight</span>
-                <span className="text-[10px] text-neutral-400 font-medium">Recomposition goal weight</span>
+                <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200">Carbs Target</span>
+                <span className="text-[10px] text-neutral-400 font-medium">For energy during resistance training</span>
               </div>
             </div>
             <div>
@@ -570,57 +515,27 @@ export default function SettingsPage({
                 <div className="flex items-center gap-1">
                   <input
                     type="number"
-                    step="0.1"
-                    value={editedWeightTarget}
-                    onChange={(e) => setEditedWeightTarget(e.target.value)}
-                    className="w-20 px-2 py-1 text-center text-xs font-bold bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 rounded-lg"
+                    value={editedCarbs}
+                    onChange={(e) => setEditedCarbs(e.target.value)}
+                    className="w-20 px-2 py-1 text-center text-xs font-bold bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 rounded-lg text-neutral-900 dark:text-white"
                   />
-                  <span className="text-[10px] font-bold text-neutral-400">kg</span>
+                  <span className="text-[10px] font-bold text-neutral-400">g</span>
                 </div>
               ) : (
-                <span className="text-xs font-extrabold text-neutral-750 dark:text-neutral-300">{profile.targetWeight.toFixed(1)} kg</span>
+                <span className="text-xs font-extrabold text-neutral-750 dark:text-neutral-300">{profile.dailyCarbsTarget || 200} g</span>
               )}
             </div>
           </div>
 
-          {/* Target Body Fat */}
-          <div className="flex items-center justify-between p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 bg-primary/10 rounded-xl flex items-center justify-center text-primary">
-                <Eye className="w-4.5 h-4.5" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200">Target Body Fat</span>
-                <span className="text-[10px] text-neutral-400 font-medium">Goal body fat percentage</span>
-              </div>
-            </div>
-            <div>
-              {isEditingGoals ? (
-                <div className="flex items-center gap-1">
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={editedBodyFatTarget}
-                    onChange={(e) => setEditedBodyFatTarget(e.target.value)}
-                    className="w-20 px-2 py-1 text-center text-xs font-bold bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 rounded-lg"
-                  />
-                  <span className="text-[10px] font-bold text-neutral-400">%</span>
-                </div>
-              ) : (
-                <span className="text-xs font-extrabold text-neutral-750 dark:text-neutral-300">{profile.targetBodyFat}%</span>
-              )}
-            </div>
-          </div>
-
-          {/* Maintenance TDEE */}
+          {/* Fat Target */}
           <div className="flex items-center justify-between p-4">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 bg-primary/10 rounded-xl flex items-center justify-center text-primary">
                 <Activity className="w-4.5 h-4.5" />
               </div>
               <div className="flex flex-col">
-                <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200">Maintenance TDEE</span>
-                <span className="text-[10px] text-neutral-400 font-medium">Total Daily Energy Expenditure</span>
+                <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200">Fat Target</span>
+                <span className="text-[10px] text-neutral-400 font-medium">Healthy fat target for hormone synthesis</span>
               </div>
             </div>
             <div>
@@ -628,28 +543,220 @@ export default function SettingsPage({
                 <div className="flex items-center gap-1">
                   <input
                     type="number"
-                    value={editedTdee}
-                    onChange={(e) => setEditedTdee(e.target.value)}
-                    className="w-20 px-2 py-1 text-center text-xs font-bold bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 rounded-lg"
+                    value={editedFat}
+                    onChange={(e) => setEditedFat(e.target.value)}
+                    className="w-20 px-2 py-1 text-center text-xs font-bold bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 rounded-lg text-neutral-900 dark:text-white"
                   />
-                  <span className="text-[10px] font-bold text-neutral-400">kcal</span>
+                  <span className="text-[10px] font-bold text-neutral-400">g</span>
                 </div>
               ) : (
-                <span className="text-xs font-extrabold text-neutral-750 dark:text-neutral-300">{profile.maintenanceTdee.toLocaleString()} kcal</span>
+                <span className="text-xs font-extrabold text-neutral-750 dark:text-neutral-300">{profile.dailyFatTarget || 65} g</span>
               )}
             </div>
           </div>
         </div>
       </section>
 
-      {/* ========================================================
-          FOOD DATABASE SECTION (BRAND NEW SINGLE SOURCE OF TRUTH)
-          ======================================================== */}
+      {/* 3. CURRENT BODY SECTION */}
+      <section className="space-y-3">
+        <div className="px-1 flex items-center justify-between">
+          <span className="text-[10px] font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-widest">Current Body</span>
+          
+          {!isEditingBody ? (
+            <button
+              onClick={() => {
+                setBodyHeight((profile.height || 175).toString());
+                setBodyCurrentWeight((profile.currentWeight || 70.5).toString());
+                setBodyAge((profile.age || 25).toString());
+                setBodyGender(profile.gender || 'Male');
+                setBodyActivityLevel(profile.activityLevel || 'Moderately Active');
+                setIsEditingBody(true);
+              }}
+              className="text-xs font-bold text-primary dark:text-[#99f894] hover:underline cursor-pointer"
+            >
+              Edit Body Details
+            </button>
+          ) : (
+            <div className="flex gap-2">
+              <button onClick={() => setIsEditingBody(false)} className="text-xs font-bold text-neutral-400 hover:underline">Cancel</button>
+              <button onClick={handleSaveBody} className="text-xs font-bold text-primary hover:underline">Save</button>
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white dark:bg-neutral-900 rounded-[24px] border border-neutral-100 dark:border-neutral-800 shadow-sm overflow-hidden divide-y divide-neutral-100 dark:divide-neutral-800/60">
+          {/* Height */}
+          <div className="flex items-center justify-between p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-neutral-100 dark:bg-neutral-850 rounded-xl flex items-center justify-center text-neutral-500">
+                <span className="text-xs font-black">📏</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200">Height</span>
+                <span className="text-[10px] text-neutral-400 font-medium">To estimate calorie baselines</span>
+              </div>
+            </div>
+            <div>
+              {isEditingBody ? (
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    value={bodyHeight}
+                    onChange={(e) => setBodyHeight(e.target.value)}
+                    className="w-20 px-2 py-1 text-center text-xs font-bold bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 rounded-lg text-neutral-900 dark:text-white"
+                  />
+                  <span className="text-[10px] font-bold text-neutral-400">cm</span>
+                </div>
+              ) : (
+                <span className="text-xs font-extrabold text-neutral-750 dark:text-neutral-300">{profile.height || 175} cm</span>
+              )}
+            </div>
+          </div>
+
+          {/* Current Weight */}
+          <div className="flex items-center justify-between p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-neutral-100 dark:bg-neutral-850 rounded-xl flex items-center justify-center text-neutral-500">
+                <Scale className="w-4.5 h-4.5" />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200">Current Weight</span>
+                <span className="text-[10px] text-neutral-400 font-medium">Last logged or estimated body weight</span>
+              </div>
+            </div>
+            <div>
+              {isEditingBody ? (
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={bodyCurrentWeight}
+                    onChange={(e) => setBodyCurrentWeight(e.target.value)}
+                    className="w-20 px-2 py-1 text-center text-xs font-bold bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 rounded-lg text-neutral-900 dark:text-white"
+                  />
+                  <span className="text-[10px] font-bold text-neutral-400">kg</span>
+                </div>
+              ) : (
+                <span className="text-xs font-extrabold text-neutral-750 dark:text-neutral-300">{profile.currentWeight || 70.5} kg</span>
+              )}
+            </div>
+          </div>
+
+          {/* Age */}
+          <div className="flex items-center justify-between p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-neutral-100 dark:bg-neutral-850 rounded-xl flex items-center justify-center text-neutral-500">
+                <User className="w-4.5 h-4.5" />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200">Age</span>
+                <span className="text-[10px] text-neutral-400 font-medium">Biological age for BMR calculations</span>
+              </div>
+            </div>
+            <div>
+              {isEditingBody ? (
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    value={bodyAge}
+                    onChange={(e) => setBodyAge(e.target.value)}
+                    className="w-20 px-2 py-1 text-center text-xs font-bold bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 rounded-lg text-neutral-900 dark:text-white"
+                  />
+                  <span className="text-[10px] font-bold text-neutral-400">yrs</span>
+                </div>
+              ) : (
+                <span className="text-xs font-extrabold text-neutral-750 dark:text-neutral-300">{profile.age || 25} yrs</span>
+              )}
+            </div>
+          </div>
+
+          {/* Gender */}
+          <div className="flex items-center justify-between p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-neutral-100 dark:bg-neutral-850 rounded-xl flex items-center justify-center text-neutral-500">
+                <span className="text-xs font-black">👥</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200">Gender</span>
+                <span className="text-[10px] text-neutral-400 font-medium">BMR equation coefficient</span>
+              </div>
+            </div>
+            <div>
+              {isEditingBody ? (
+                <select
+                  value={bodyGender}
+                  onChange={(e) => setBodyGender(e.target.value)}
+                  className="px-2 py-1 text-xs font-bold bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 rounded-lg text-neutral-900 dark:text-white focus:outline-none"
+                >
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                </select>
+              ) : (
+                <span className="text-xs font-extrabold text-neutral-750 dark:text-neutral-300">{profile.gender || 'Male'}</span>
+              )}
+            </div>
+          </div>
+
+          {/* Activity Level */}
+          <div className="flex items-center justify-between p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-neutral-100 dark:bg-neutral-850 rounded-xl flex items-center justify-center text-neutral-500">
+                <Activity className="w-4.5 h-4.5" />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200">Activity Level</span>
+                <span className="text-[10px] text-neutral-400 font-medium">Daily non-workout energy expenditure</span>
+              </div>
+            </div>
+            <div>
+              {isEditingBody ? (
+                <select
+                  value={bodyActivityLevel}
+                  onChange={(e) => setBodyActivityLevel(e.target.value)}
+                  className="px-2 py-1 text-xs font-bold bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 rounded-lg text-neutral-900 dark:text-white focus:outline-none"
+                >
+                  <option value="Sedentary">Sedentary</option>
+                  <option value="Lightly Active">Lightly Active</option>
+                  <option value="Moderately Active">Moderately Active</option>
+                  <option value="Very Active">Very Active</option>
+                </select>
+              ) : (
+                <span className="text-xs font-extrabold text-neutral-750 dark:text-neutral-300">{profile.activityLevel || 'Moderately Active'}</span>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 4. BODY COMPOSITION */}
+      <section className="space-y-3">
+        <span className="text-[10px] font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-widest px-1">Body Composition</span>
+        <div className="bg-white dark:bg-neutral-900 rounded-[24px] border border-neutral-100 dark:border-neutral-800 p-5 shadow-sm space-y-4">
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 bg-blue-500/10 rounded-xl flex items-center justify-center text-blue-500 shrink-0">
+              <Scale className="w-5 h-5" />
+            </div>
+            <div className="space-y-1.5 flex-grow">
+              <h4 className="text-xs font-black text-neutral-800 dark:text-white uppercase tracking-wide">Historical Body Composition</h4>
+              <p className="text-[11px] text-neutral-400 leading-relaxed">
+                Log and browse precise weight measurements, body fat %, muscle mass (kg), visceral fat indexes, and BMR histories to monitor lean gains.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => onNavigate('bodycomp')}
+            className="w-full py-3 bg-neutral-50 dark:bg-neutral-800/60 hover:bg-neutral-100 dark:hover:bg-neutral-800 border border-neutral-100 dark:border-neutral-750 text-neutral-700 dark:text-neutral-300 font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            Open Body Composition Page <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      </section>
+
+      {/* 5. FOOD DATABASE SECTION */}
       <section className="space-y-3">
         <div className="flex justify-between items-start px-1">
           <div>
-            <h3 className="text-[14px] font-black text-neutral-900 dark:text-white uppercase tracking-wider">Food Database</h3>
-            <p className="text-xs text-neutral-400 dark:text-neutral-500 font-semibold">Manage your custom food library.</p>
+            <h3 className="text-[10px] font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-widest">Food Database</h3>
           </div>
           {!isAddingFood && !editingFoodId && (
             <button
@@ -657,9 +764,9 @@ export default function SettingsPage({
                 resetFoodForm();
                 setIsAddingFood(true);
               }}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold bg-primary text-white rounded-full hover:bg-primary/95 shadow-md shadow-primary/10 transition-all cursor-pointer"
+              className="flex items-center gap-1 px-3 py-1 text-[10px] font-extrabold bg-primary text-white rounded-full hover:bg-primary/95 shadow-md shadow-primary/10 transition-all cursor-pointer uppercase tracking-wider"
             >
-              <Plus className="w-3.5 h-3.5 stroke-[3]" /> Add Food
+              <Plus className="w-3 h-3 stroke-[3]" /> Add Food
             </button>
           )}
         </div>
@@ -712,7 +819,7 @@ export default function SettingsPage({
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase text-neutral-400">Unit (e.g. g, pcs, cups)</label>
+                <label className="text-[10px] font-bold uppercase text-neutral-400">Unit (e.g. g, pcs)</label>
                 <input
                   type="text"
                   required
@@ -725,7 +832,7 @@ export default function SettingsPage({
 
             <div className="grid grid-cols-4 gap-2">
               <div className="bg-white dark:bg-neutral-800 p-2.5 rounded-xl border border-neutral-100 dark:border-neutral-750 text-center">
-                <label className="block text-[8px] font-black text-primary-light uppercase tracking-wider mb-1">Calories</label>
+                <label className="block text-[8px] font-black text-neutral-400 uppercase tracking-wider mb-1">Calories</label>
                 <input
                   type="number"
                   required
@@ -802,7 +909,7 @@ export default function SettingsPage({
             />
           </div>
 
-          <div className="divide-y divide-neutral-100 dark:divide-neutral-800/60 max-h-72 overflow-y-auto scroll-hide">
+          <div className="divide-y divide-neutral-100 dark:divide-neutral-800/60 max-h-56 overflow-y-auto scroll-hide">
             {filteredFoods.map((food) => (
               <div key={food.id} className="flex justify-between items-center py-2.5">
                 <div className="flex items-center gap-3">
@@ -823,14 +930,12 @@ export default function SettingsPage({
                   <button
                     onClick={() => handleStartEditFood(food)}
                     className="p-1 text-neutral-400 hover:text-primary transition-colors cursor-pointer"
-                    title="Edit Food"
                   >
                     <Edit3 className="w-3.5 h-3.5" />
                   </button>
                   <button
                     onClick={() => handleDeleteFood(food.id)}
                     className="p-1 text-neutral-400 hover:text-red-500 transition-colors cursor-pointer"
-                    title="Delete Food"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -844,211 +949,165 @@ export default function SettingsPage({
         </div>
       </section>
 
-      {/* ========================================================
-          QUICK MEAL PRESETS SECTION
-          ======================================================== */}
+      {/* 5b. QUICK MEAL PRESETS (nested logically under Food Library) */}
       <section className="space-y-3">
         <div className="flex justify-between items-start px-1">
           <div>
-            <h3 className="text-[14px] font-black text-neutral-900 dark:text-white uppercase tracking-wider">Quick Meal Presets</h3>
-            <p className="text-xs text-neutral-400 dark:text-neutral-500 font-semibold">Create reusable meal templates.</p>
+            <h3 className="text-[10px] font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-widest">Meal Presets</h3>
           </div>
-          {!isAddingPreset && !editingPresetId && (
+          {!isCreatingPreset && (
             <button
-              onClick={() => {
-                resetPresetForm();
-                setIsAddingPreset(true);
-              }}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold bg-primary text-white rounded-full hover:bg-primary/95 shadow-md shadow-primary/10 transition-all cursor-pointer"
+              onClick={() => setIsCreatingPreset(true)}
+              className="flex items-center gap-1 px-3 py-1 text-[10px] font-extrabold bg-primary text-white rounded-full hover:bg-primary/95 shadow-md shadow-primary/10 transition-all cursor-pointer uppercase tracking-wider"
             >
-              <Plus className="w-3.5 h-3.5 stroke-[3]" /> Create Preset
+              <Plus className="w-3 h-3 stroke-[3]" /> Create Preset
             </button>
           )}
         </div>
 
-        {/* 1. Add / Edit Preset Builder Form */}
-        {(isAddingPreset || editingPresetId) && (
-          <form onSubmit={handleSavePreset} className="bg-neutral-50 dark:bg-neutral-900/60 rounded-2xl p-5 border border-primary/25 space-y-4 animate-fade-in">
+        {/* Create Meal Preset Form */}
+        {isCreatingPreset && (
+          <form onSubmit={handleCreatePreset} className="bg-neutral-50 dark:bg-neutral-900/60 rounded-2xl p-5 border border-primary/25 space-y-4 animate-fade-in">
             <div className="flex justify-between items-center">
-              <h4 className="text-xs font-black uppercase text-primary">
-                {editingPresetId ? "Edit Meal Preset" : "Build Meal Preset"}
-              </h4>
-              <button type="button" onClick={resetPresetForm} className="text-neutral-400 hover:text-neutral-600">
+              <h4 className="text-xs font-black uppercase text-primary">Create Meal Combo</h4>
+              <button type="button" onClick={() => setIsCreatingPreset(false)} className="text-neutral-400 hover:text-neutral-600">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold uppercase text-neutral-400">Preset Template Name</label>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-neutral-400">Combo Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Breakfast Oats"
+                  value={presetName}
+                  onChange={(e) => setPresetName(e.target.value)}
+                  className="w-full px-3 py-2 text-xs font-bold bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl focus:outline-none text-neutral-900 dark:text-white"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-neutral-400">Default Category</label>
+                <select
+                  value={presetCategory}
+                  onChange={(e) => setPresetCategory(e.target.value as any)}
+                  className="w-full px-3 py-2 text-xs font-bold bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl focus:outline-none text-neutral-900 dark:text-white appearance-none"
+                >
+                  <option value="breakfast">Breakfast</option>
+                  <option value="lunch">Lunch</option>
+                  <option value="dinner">Dinner</option>
+                  <option value="snack">Snack</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Selected Ingredients */}
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold uppercase text-neutral-400 block">Combo Ingredients</label>
+              <div className="bg-white dark:bg-neutral-800 rounded-xl border border-neutral-100 dark:border-neutral-750 p-3 space-y-2 max-h-40 overflow-y-auto">
+                {selectedPresetItems.map(item => {
+                  const food = foodDatabase.find(f => f.id === item.foodId)!;
+                  return (
+                    <div key={item.foodId} className="flex justify-between items-center text-xs">
+                      <span className="font-bold text-neutral-800 dark:text-neutral-200">{food.emoji} {food.name}</span>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          value={item.quantity}
+                          onChange={(e) => handleUpdatePresetItemQty(item.foodId, parseInt(e.target.value) || 0)}
+                          className="w-16 px-1.5 py-1 text-center font-bold bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 rounded text-neutral-900 dark:text-white"
+                        />
+                        <span className="text-[10px] font-bold text-neutral-400">{food.unit}</span>
+                        <button type="button" onClick={() => handleRemovePresetItem(item.foodId)} className="text-red-500 hover:text-red-700">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+                {selectedPresetItems.length === 0 && (
+                  <p className="text-[10px] text-neutral-400 text-center font-bold py-4">Search & tap foods below to build this combo</p>
+                )}
+              </div>
+            </div>
+
+            {/* Search ingredients */}
+            <div className="space-y-1.5">
               <input
                 type="text"
-                required
-                placeholder="e.g. Breakfast Diet, Lunch Warteg"
-                value={presetName}
-                onChange={(e) => setPresetName(e.target.value)}
-                className="w-full px-3 py-2 text-xs font-bold bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl focus:outline-none text-neutral-900 dark:text-white"
+                placeholder="Search ingredients..."
+                value={presetSearch}
+                onChange={(e) => setPresetSearch(e.target.value)}
+                className="w-full px-3 py-1.5 text-[11px] font-bold bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl focus:outline-none text-neutral-900 dark:text-white"
               />
+              <div className="grid grid-cols-2 gap-1.5 max-h-24 overflow-y-auto pt-1">
+                {presetFoodOptions.map(food => (
+                  <button
+                    key={food.id}
+                    type="button"
+                    onClick={() => handleAddPresetItem(food.id)}
+                    className="flex items-center gap-1.5 p-1.5 text-left bg-white dark:bg-neutral-800 hover:bg-neutral-100 rounded-lg border border-neutral-100 dark:border-neutral-700/60 text-[10px] font-bold text-neutral-700 dark:text-neutral-300"
+                  >
+                    <span>{food.emoji}</span>
+                    <span className="truncate flex-grow">{food.name}</span>
+                    <Plus className="w-3 h-3 text-primary shrink-0" />
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* Selected food items list */}
-            <div className="space-y-2.5">
-              <label className="block text-[10px] font-bold uppercase text-neutral-400">Foods in this Preset</label>
-              {presetRows.map((row, idx) => {
-                const selectedFoodItem = foodDatabase.find(f => f.id === row.foodId);
-                return (
-                  <div key={idx} className="flex gap-2 items-center">
-                    <div className="flex-grow">
-                      <select
-                        value={row.foodId}
-                        onChange={(e) => handleRowChange(idx, 'foodId', e.target.value)}
-                        className="w-full px-3 py-2 text-xs font-bold bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl focus:outline-none"
-                      >
-                        <option value="">-- Select Food --</option>
-                        {foodDatabase.map(f => (
-                          <option key={f.id} value={f.id}>
-                            {f.emoji} {f.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="w-24 relative flex items-center shrink-0">
-                      <input
-                        type="number"
-                        placeholder="Qty"
-                        required
-                        value={row.quantity}
-                        onChange={(e) => handleRowChange(idx, 'quantity', e.target.value)}
-                        className="w-full pl-3 pr-10 py-2 text-xs font-bold bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl focus:outline-none"
-                      />
-                      <span className="absolute right-3 text-[10px] text-neutral-450 font-bold select-none">
-                        {selectedFoodItem?.unit || ''}
-                      </span>
-                    </div>
-
-                    {presetRows.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveRow(idx)}
-                        className="p-2 text-neutral-400 hover:text-red-500 transition-colors shrink-0"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-
-              <button
-                type="button"
-                onClick={handleAddRow}
-                className="inline-flex items-center gap-1 text-[11px] font-bold text-primary dark:text-[#99f894] hover:underline"
-              >
-                <Plus className="w-3.5 h-3.5" /> Add another food row
-              </button>
-            </div>
-
-            <div className="flex gap-2 pt-1.5 justify-end">
-              <button
-                type="button"
-                onClick={resetPresetForm}
-                className="px-4 py-2 text-xs font-bold bg-neutral-200 dark:bg-neutral-850 text-neutral-700 dark:text-neutral-300 rounded-xl"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 text-xs font-bold bg-primary text-white rounded-xl shadow-md"
-              >
-                {editingPresetId ? "Save Preset" : "Save Template"}
-              </button>
-            </div>
+            <button
+              type="submit"
+              disabled={selectedPresetItems.length === 0}
+              className="w-full py-2 bg-primary disabled:opacity-40 text-white text-xs font-bold rounded-xl"
+            >
+              Save Preset Combo
+            </button>
           </form>
         )}
 
-        {/* 2. Existing Presets display list */}
-        <div className="bg-white dark:bg-neutral-900 rounded-[24px] border border-neutral-100 dark:border-neutral-800 p-5 shadow-sm divide-y divide-neutral-150 dark:divide-neutral-800/60">
-          {mealPresets.map((preset) => {
-            // Calculate dynamic calorie and protein totals from Food Database values!
-            let presetCalories = 0;
-            let presetProtein = 0;
-
-            preset.items.forEach(item => {
-              const dbFood = foodDatabase.find(f => f.id === item.foodId);
-              if (dbFood) {
-                const factor = item.quantity / dbFood.baseQty;
-                presetCalories += dbFood.calories * factor;
-                presetProtein += dbFood.protein * factor;
-              }
-            });
-
-            return (
-              <div key={preset.id} className="py-4 first:pt-0 last:pb-0 space-y-2">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <h4 className="text-sm font-extrabold text-neutral-800 dark:text-neutral-100">{preset.name}</h4>
-                    <div className="flex gap-2 text-[10px] text-neutral-400 font-bold mt-0.5">
-                      <span className="text-primary-light">{Math.round(presetCalories)} kcal</span>
-                      <span>•</span>
-                      <span className="text-green-600">{presetProtein.toFixed(1)}g Protein</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleStartEditPreset(preset)}
-                      className="p-1 text-neutral-400 hover:text-primary transition-colors cursor-pointer"
-                      title="Edit Preset"
-                    >
-                      <Edit3 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => handleDeletePreset(preset.id)}
-                      className="p-1 text-neutral-400 hover:text-red-500 transition-colors cursor-pointer"
-                      title="Delete Preset"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
+        {/* List of presets */}
+        <div className="bg-white dark:bg-neutral-900 rounded-[24px] border border-neutral-100 dark:border-neutral-800 p-5 shadow-sm divide-y divide-neutral-100 dark:divide-neutral-800/60 max-h-64 overflow-y-auto scroll-hide">
+          {mealPresets.map((preset) => (
+            <div key={preset.id} className="flex justify-between items-center py-2.5">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 bg-primary/10 rounded-xl flex items-center justify-center text-primary">
+                  <BookOpen className="w-4.5 h-4.5" />
                 </div>
-
-                {/* Bullets lists */}
-                <ul className="pl-3.5 space-y-1 list-disc text-[11px] text-neutral-500 dark:text-neutral-400 font-semibold">
-                  {preset.items.map((item, index) => {
-                    const dbFood = foodDatabase.find(f => f.id === item.foodId);
-                    if (!dbFood) return null;
-                    return (
-                      <li key={index}>
-                        {dbFood.emoji} {item.quantity} {dbFood.unit} {dbFood.name}
-                      </li>
-                    );
-                  })}
-                </ul>
+                <div>
+                  <h5 className="text-xs font-bold text-neutral-800 dark:text-neutral-200">{preset.name}</h5>
+                  <p className="text-[10px] text-neutral-400 capitalize font-bold mt-0.5">
+                    {preset.category} • <span className="text-primary-light">{preset.totalCalories} kcal</span> • <span className="text-green-600">{preset.totalProtein}g P</span>
+                  </p>
+                </div>
               </div>
-            );
-          })}
+              <button
+                onClick={() => handleDeletePreset(preset.id)}
+                className="p-1 text-neutral-400 hover:text-red-500 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
           {mealPresets.length === 0 && (
-            <p className="text-xs text-neutral-400 font-bold text-center py-4">No meal presets built yet.</p>
+            <p className="text-xs text-neutral-400 font-bold text-center py-4">No custom combos created yet.</p>
           )}
         </div>
       </section>
 
-      {/* ========================================================
-          DATA MANAGEMENT
-          ======================================================== */}
+      {/* 6. DATA SECTION */}
       <section className="space-y-3">
-        <div className="px-1">
-          <span className="text-[10px] font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-widest">Data Management</span>
-        </div>
-        <div className="bg-white dark:bg-neutral-900 rounded-[24px] border border-neutral-100 dark:border-neutral-800 shadow-sm overflow-hidden divide-y divide-neutral-100 dark:divide-neutral-800/60">
-          
+        <span className="text-[10px] font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-widest px-1">Data & Synchronization</span>
+        
+        <div className="bg-white dark:bg-neutral-900 rounded-[24px] border border-neutral-100 dark:border-neutral-800 overflow-hidden divide-y divide-neutral-100 dark:divide-neutral-800/60">
           {/* Export Data */}
           <button 
             onClick={handleExportData}
             className="w-full flex items-center justify-between p-4 text-left hover:bg-neutral-50 dark:hover:bg-neutral-800/40 transition-colors cursor-pointer group"
           >
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 bg-neutral-100 dark:bg-neutral-800 rounded-xl flex items-center justify-center text-neutral-500 dark:text-neutral-400">
+              <div className="w-9 h-9 bg-neutral-100 dark:bg-neutral-800 rounded-xl flex items-center justify-center text-neutral-500">
                 <Download className="w-4.5 h-4.5" />
               </div>
               <div className="flex flex-col">
@@ -1073,7 +1132,7 @@ export default function SettingsPage({
               className="w-full flex items-center justify-between p-4 text-left hover:bg-neutral-50 dark:hover:bg-neutral-800/40 transition-colors cursor-pointer group"
             >
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 bg-neutral-100 dark:bg-neutral-800 rounded-xl flex items-center justify-center text-neutral-500 dark:text-neutral-400">
+                <div className="w-9 h-9 bg-neutral-100 dark:bg-neutral-800 rounded-xl flex items-center justify-center text-neutral-500">
                   <Upload className="w-4.5 h-4.5" />
                 </div>
                 <div className="flex flex-col">
@@ -1101,7 +1160,6 @@ export default function SettingsPage({
             </div>
             <span className="text-[10px] font-bold text-red-500 bg-red-50 dark:bg-red-950/45 px-2.5 py-1 rounded-md uppercase tracking-wider">Reset</span>
           </button>
-
         </div>
       </section>
 

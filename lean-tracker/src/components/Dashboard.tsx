@@ -1,5 +1,21 @@
 import React from 'react';
-import { Flame, Calendar, Award, Dumbbell, Sparkles, Plus, Scale, ChevronRight, Apple, X, CheckCircle2, Clock } from 'lucide-react';
+import { 
+  Flame, 
+  Calendar, 
+  Award, 
+  Dumbbell, 
+  Sparkles, 
+  Plus, 
+  Scale, 
+  ChevronRight, 
+  Apple, 
+  X, 
+  CheckCircle2, 
+  Clock,
+  TrendingUp,
+  Target,
+  Heart
+} from 'lucide-react';
 import { FoodLogItem, WorkoutLogItem, BodyCompLogItem, UserProfile } from '../types';
 import { getFormattedDate } from '../utils';
 import { motion } from 'motion/react';
@@ -9,10 +25,11 @@ interface DashboardProps {
   foodLogs: FoodLogItem[];
   workoutLogs: WorkoutLogItem[];
   bodyCompLogs: BodyCompLogItem[];
-  onNavigate: (tab: 'home' | 'food' | 'workouts' | 'progress' | 'settings') => void;
-  onOpenQuickAdd: (tab?: 'food' | 'workout' | 'weight') => void;
+  onNavigate: (tab: 'home' | 'food' | 'workouts' | 'progress' | 'calendar' | 'settings' | 'bodycomp') => void;
+  onOpenQuickAdd: (tab?: 'food' | 'workout' | 'weight' | 'bodycomp') => void;
   onDeleteFood: (id: string) => void;
   onDeleteWorkout: (id: string) => void;
+  selectedDateString: string;
 }
 
 export default function Dashboard({
@@ -23,65 +40,99 @@ export default function Dashboard({
   onNavigate,
   onOpenQuickAdd,
   onDeleteFood,
-  onDeleteWorkout
+  onDeleteWorkout,
+  selectedDateString
 }: DashboardProps) {
-  // 1. Calculate Core Calories Metrics
+  // 1. Filter Logs for Selected Date ONLY
+  const dailyFood = foodLogs.filter(item => item.dateString === selectedDateString);
+  const dailyWorkouts = workoutLogs.filter(item => item.dateString === selectedDateString);
+  const dailyBodyComp = bodyCompLogs.find(item => item.dateString === selectedDateString);
+
+  // 2. Core Calories Calculations
   const targetCalories = profile.dailyCalorieTarget;
-  const consumedCalories = foodLogs.reduce((sum, item) => sum + item.calories, 0);
-  const burnedCalories = workoutLogs.reduce((sum, item) => sum + item.caloriesBurned, 0);
+  const consumedCalories = dailyFood.reduce((sum, item) => sum + item.calories, 0);
+  const burnedCalories = dailyWorkouts.reduce((sum, item) => sum + item.caloriesBurned, 0);
   const remainingCalories = Math.max(0, targetCalories - consumedCalories);
 
-  // Calorie progress percentage
   const caloriePercent = Math.min(100, (consumedCalories / targetCalories) * 100);
-  const strokeCircumference = 2 * Math.PI * 92; // Radius 92 -> 578.05
+  const strokeCircumference = 2 * Math.PI * 92; 
   const strokeOffset = strokeCircumference - (caloriePercent / 100) * strokeCircumference;
 
-  // 2. Protein Metrics
+  // 3. Protein Metrics
   const targetProtein = profile.dailyProteinTarget;
-  const consumedProtein = foodLogs.reduce((sum, item) => sum + item.protein, 0);
+  const consumedProtein = dailyFood.reduce((sum, item) => sum + item.protein, 0);
   const proteinPercent = Math.min(100, Math.round((consumedProtein / targetProtein) * 100));
-  const proteinStrokeCircumference = 2 * Math.PI * 18; // Radius 18 -> 113.1
-  const proteinStrokeOffset = proteinStrokeCircumference - (proteinPercent / 100) * proteinStrokeCircumference;
 
-  // 3. Deficit calculation: TDEE - Consumed + Burned
+  // 4. Energy Balance & Deficit
+  const netCalories = consumedCalories - burnedCalories;
   const currentDeficit = profile.maintenanceTdee - consumedCalories + burnedCalories;
   const targetDeficit = profile.maintenanceTdee - profile.dailyCalorieTarget;
+  const deficitProgressPercent = Math.min(100, Math.max(0, Math.round((currentDeficit / targetDeficit) * 100)));
 
-  // 4. Weight Metrics
-  const latestWeightLog = bodyCompLogs[0] || { weight: 70.5, bodyFatPercent: 15.2 };
-  const baselineWeight = bodyCompLogs[bodyCompLogs.length - 1]?.weight || 72.7;
-  const weightChange = latestWeightLog.weight - baselineWeight;
-  const weightChangeStr = weightChange <= 0 ? `${weightChange.toFixed(1)} kg` : `+${weightChange.toFixed(1)} kg`;
+  // 5. Weight & Composition (Filtered & Historical)
+  const weightVal = dailyBodyComp ? dailyBodyComp.weight : (bodyCompLogs[0]?.weight || profile.currentWeight || 70.5);
+  const bodyFatVal = dailyBodyComp ? dailyBodyComp.bodyFatPercent : (bodyCompLogs[0]?.bodyFatPercent || profile.targetBodyFat || 15.0);
 
-  // 7-Day Moving Average
+  // Calculate Weekly Weight Change relative to selectedDateString
+  const getWeeklyWeightChange = () => {
+    const pastLogs = bodyCompLogs
+      .filter(l => l.dateString <= selectedDateString)
+      .sort((a, b) => b.dateString.localeCompare(a.dateString));
+    
+    if (pastLogs.length === 0) return '0.0 kg';
+    const latest = pastLogs[0];
+    const latestDate = new Date(latest.dateString);
+    const targetDateStr = new Date(latestDate.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const referenceLog = bodyCompLogs
+      .filter(l => l.dateString <= targetDateStr)
+      .sort((a, b) => b.dateString.localeCompare(a.dateString))[0];
+    
+    if (!referenceLog) {
+      const earliest = bodyCompLogs[bodyCompLogs.length - 1];
+      if (earliest && earliest.id !== latest.id) {
+        const diff = latest.weight - earliest.weight;
+        return diff <= 0 ? `${diff.toFixed(1)} kg` : `+${diff.toFixed(1)} kg`;
+      }
+      return '0.0 kg';
+    }
+    const diff = latest.weight - referenceLog.weight;
+    return diff <= 0 ? `${diff.toFixed(1)} kg` : `+${diff.toFixed(1)} kg`;
+  };
+
+  const weeklyWeightChangeStr = getWeeklyWeightChange();
+
+  // 7-Day Moving Average Weight
   const weightSum = bodyCompLogs.slice(0, 7).reduce((sum, item) => sum + item.weight, 0);
   const ma7Weight = bodyCompLogs.length > 0 ? (weightSum / Math.min(7, bodyCompLogs.length)).toFixed(1) : '70.9';
 
-  // 5. Dynamic AI Coach Evaluation Text
+  // 6. Body Fat Goal Progress
+  const getBodyFatGoalProgress = () => {
+    const target = profile.targetBodyFat;
+    const oldest = bodyCompLogs[bodyCompLogs.length - 1]?.bodyFatPercent || 15.9;
+    if (oldest === target) return 100;
+    const progress = ((oldest - bodyFatVal) / (oldest - target)) * 100;
+    return Math.min(100, Math.max(0, Math.round(progress)));
+  };
+
+  const bodyFatGoalProgress = getBodyFatGoalProgress();
+
+  // 7. Dynamic AI Coach Advice
   const getAiEvaluation = () => {
-    if (foodLogs.length === 0) {
-      return "Start logging your meals and workouts today! Consistency in tracking protein intake and energy deficit is the absolute key to successful body recomposition.";
+    if (dailyFood.length === 0 && dailyWorkouts.length === 0) {
+      return "Start logging meals and activity for today! Maintaining a consistent active caloric deficit protects lean muscle mass while promoting body fat reduction.";
     }
     const proteinRatio = consumedProtein / targetProtein;
-    const calorieRatio = consumedCalories / targetCalories;
-
-    let evaluation = "Optimal progress today. ";
-    if (proteinRatio >= 0.85) {
-      evaluation += "Protein intake is fully achieved, keeping your muscle mass protected. ";
+    let evaluation = "";
+    if (proteinRatio >= 0.9) {
+      evaluation += "Outstanding protein achievement today! Muscle tissue recovery is fully optimized. ";
     } else {
-      evaluation += `Protein intake is currently at ${Math.round(proteinRatio * 100)}% of your goal. Add a whole food source like egg whites or chicken breast to hit your recovery target. `;
-    }
-
-    if (calorieRatio <= 1.0) {
-      evaluation += "Calorie expenditure remains well within your active energy limit. ";
-    } else {
-      evaluation += "You've exceeded your daily calorie target. Focus on keeping active to secure your recomp deficit. ";
+      evaluation += `Protein intake is at ${Math.round(proteinRatio * 100)}% of your target. Consider adding egg whites or whey to hit your target. `;
     }
 
     if (currentDeficit >= targetDeficit) {
-      evaluation += "Your caloric deficit is perfectly aligned for lean mass preservation and body fat reduction.";
+      evaluation += "Your active caloric deficit is perfectly on point for continuous fat loss.";
     } else {
-      evaluation += `Try to keep moving to secure your target daily deficit of ${targetDeficit} kcal.`;
+      evaluation += `You are ${targetDeficit - currentDeficit} kcal short of your deficit target. An extra short walk will secure your goal today.`;
     }
     return evaluation;
   };
@@ -103,7 +154,6 @@ export default function Dashboard({
       {/* 1. HERO CALORIE RING CARD */}
       <section className="bg-white dark:bg-neutral-900 rounded-[28px] border border-neutral-100/60 dark:border-neutral-800 shadow-[0_2px_12px_rgba(0,0,0,0.015)] p-6 flex flex-col items-center">
         <div className="relative w-56 h-56 flex items-center justify-center">
-          {/* Circular SVG Progress Ring with micro-animation */}
           <svg className="w-full h-full transform -rotate-90" viewBox="0 0 224 224">
             <circle
               className="text-neutral-100 dark:text-neutral-800"
@@ -130,7 +180,6 @@ export default function Dashboard({
             />
           </svg>
           <div className="absolute flex flex-col items-center justify-center text-center">
-            {/* Number is the focal point */}
             <motion.span 
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -145,89 +194,204 @@ export default function Dashboard({
           </div>
         </div>
 
-        {/* Dynamic Macro/Calorie KPI Row - Faint border, high negative space */}
+        {/* Dynamic Macro/Calorie KPI Row */}
         <div className="grid grid-cols-3 w-full gap-4 mt-6 pt-5 border-t border-neutral-100 dark:border-neutral-800/60 text-center">
           <div>
             <span className="text-[10px] font-bold text-neutral-400 dark:text-neutral-500 uppercase tracking-widest block">Consumed</span>
-            <span className="text-base font-extrabold text-neutral-800 dark:text-neutral-100 mt-1 block">
-              {consumedCalories.toLocaleString()} <span className="text-[9px] font-normal text-neutral-400">kcal</span>
+            <span className="text-sm font-black text-neutral-800 dark:text-neutral-100 mt-1 block">
+              {consumedCalories.toLocaleString()} <span className="text-[8px] font-normal text-neutral-400">kcal</span>
             </span>
           </div>
           <div>
             <span className="text-[10px] font-bold text-neutral-400 dark:text-neutral-500 uppercase tracking-widest block">Burned</span>
-            <span className="text-base font-extrabold text-neutral-800 dark:text-neutral-100 mt-1 block">
-              {burnedCalories.toLocaleString()} <span className="text-[9px] font-normal text-neutral-400">kcal</span>
+            <span className="text-sm font-black text-neutral-800 dark:text-neutral-100 mt-1 block">
+              {burnedCalories.toLocaleString()} <span className="text-[8px] font-normal text-neutral-400">kcal</span>
             </span>
           </div>
           <div>
             <span className="text-[10px] font-bold text-neutral-400 dark:text-neutral-500 uppercase tracking-widest block">Goal Target</span>
-            <span className="text-base font-extrabold text-neutral-800 dark:text-neutral-100 mt-1 block">
-              {targetCalories.toLocaleString()} <span className="text-[9px] font-normal text-neutral-400">kcal</span>
+            <span className="text-sm font-black text-neutral-800 dark:text-neutral-100 mt-1 block">
+              {targetCalories.toLocaleString()} <span className="text-[8px] font-normal text-neutral-400">kcal</span>
             </span>
           </div>
         </div>
       </section>
 
-      {/* 2. RECOMPOSITION SECONDARY SUMMARY CARDS */}
-      <section className="grid grid-cols-3 gap-3">
-        {/* Protein Summary Card */}
-        <div 
-          onClick={() => onNavigate('food')}
-          className="bg-white dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800/80 p-4 rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.01)] flex flex-col items-center text-center cursor-pointer hover:border-primary/20 hover:-translate-y-0.5 transition-all active:scale-95 duration-200"
-        >
-          <div className="relative w-12 h-12 mb-2 flex items-center justify-center">
-            <svg className="w-full h-full transform -rotate-90" viewBox="0 0 48 48">
-              <circle cx="24" cy="24" r="18" fill="transparent" stroke="currentColor" className="text-neutral-100 dark:text-neutral-800" strokeWidth="2.5" />
-              <motion.circle 
-                cx="24" 
-                cy="24" 
-                r="18" 
-                fill="transparent" 
-                stroke="var(--color-primary)" 
-                strokeWidth="3" 
-                strokeDasharray={proteinStrokeCircumference} 
-                initial={{ strokeDashoffset: proteinStrokeCircumference }}
-                animate={{ strokeDashoffset: proteinStrokeOffset }}
-                transition={{ duration: 0.8, ease: "easeOut" }}
-                strokeLinecap="round" 
-              />
-            </svg>
-            <span className="absolute text-[9px] font-black text-neutral-800 dark:text-neutral-200">{proteinPercent}%</span>
+      {/* 2. PREMIUM iOS BENTO DASHBOARD METRICS */}
+      <section className="space-y-3.5">
+        <h3 className="text-xs font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-widest px-1">Daily Vital Metrics</h3>
+
+        <div className="grid grid-cols-2 gap-3.5">
+          {/* Today's Weight Card */}
+          <div 
+            onClick={() => onNavigate('bodycomp')}
+            className="bg-white dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800/80 p-4 rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.01)] flex flex-col justify-between cursor-pointer hover:border-primary/20 hover:-translate-y-0.5 transition-all duration-200"
+          >
+            <div className="flex justify-between items-start">
+              <span className="text-[10px] font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-wider">Today's Weight</span>
+              <Scale className="w-4.5 h-4.5 text-blue-500" />
+            </div>
+            <div className="mt-3">
+              <p className="text-xl font-black text-neutral-900 dark:text-white leading-none">
+                {dailyBodyComp ? `${weightVal.toFixed(1)} kg` : "Not Logged"}
+              </p>
+              {!dailyBodyComp && (
+                <p className="text-[9px] text-primary font-bold mt-1.5 flex items-center gap-0.5">
+                  <Plus className="w-3 h-3" /> Log weight
+                </p>
+              )}
+              {dailyBodyComp && (
+                <p className="text-[9px] text-neutral-400 font-bold mt-1.5">
+                  Previous: {bodyCompLogs[1]?.weight.toFixed(1) || '70.6'} kg
+                </p>
+              )}
+            </div>
           </div>
-          <span className="text-[9px] font-bold text-neutral-400 dark:text-neutral-500 uppercase tracking-widest">Protein</span>
-          <span className="text-sm font-black text-neutral-900 dark:text-neutral-100 mt-0.5">{consumedProtein.toFixed(1)}g</span>
-          <span className="text-[9px] text-neutral-400 mt-1">/ {targetProtein}g</span>
+
+          {/* Body Fat % Card */}
+          <div 
+            onClick={() => onNavigate('bodycomp')}
+            className="bg-white dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800/80 p-4 rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.01)] flex flex-col justify-between cursor-pointer hover:border-primary/20 hover:-translate-y-0.5 transition-all duration-200"
+          >
+            <div className="flex justify-between items-start">
+              <span className="text-[10px] font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-wider">Body Fat %</span>
+              <Award className="w-4.5 h-4.5 text-rose-500" />
+            </div>
+            <div className="mt-3">
+              <p className="text-xl font-black text-neutral-900 dark:text-white leading-none">
+                {dailyBodyComp ? `${bodyFatVal.toFixed(1)}%` : "Not Logged"}
+              </p>
+              <p className="text-[9px] text-neutral-400 font-bold mt-1.5">
+                Target: {profile.targetBodyFat}%
+              </p>
+            </div>
+          </div>
+
+          {/* Weekly Weight Change Card */}
+          <div 
+            onClick={() => onNavigate('progress')}
+            className="bg-white dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800/80 p-4 rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.01)] flex flex-col justify-between cursor-pointer hover:border-primary/20 hover:-translate-y-0.5 transition-all duration-200"
+          >
+            <div className="flex justify-between items-start">
+              <span className="text-[10px] font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-wider">Weekly Change</span>
+              <TrendingUp className="w-4.5 h-4.5 text-emerald-500" />
+            </div>
+            <div className="mt-3">
+              <p className={`text-xl font-black leading-none ${weeklyWeightChangeStr.startsWith('-') ? 'text-green-500' : 'text-neutral-900 dark:text-white'}`}>
+                {weeklyWeightChangeStr}
+              </p>
+              <p className="text-[9px] text-neutral-400 font-bold mt-1.5">
+                Moving Avg: {ma7Weight} kg
+              </p>
+            </div>
+          </div>
+
+          {/* Net Calories Card */}
+          <div 
+            onClick={() => onNavigate('food')}
+            className="bg-white dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800/80 p-4 rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.01)] flex flex-col justify-between cursor-pointer hover:border-primary/20 hover:-translate-y-0.5 transition-all duration-200"
+          >
+            <div className="flex justify-between items-start">
+              <span className="text-[10px] font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-wider">Net Calories</span>
+              <Apple className="w-4.5 h-4.5 text-orange-500" />
+            </div>
+            <div className="mt-3">
+              <p className="text-xl font-black text-neutral-900 dark:text-white leading-none">
+                {netCalories.toLocaleString()} <span className="text-[10px] font-medium text-neutral-400">kcal</span>
+              </p>
+              <p className="text-[9px] text-neutral-400 font-bold mt-1.5">
+                In: {consumedCalories} • Out: {burnedCalories}
+              </p>
+            </div>
+          </div>
+
+          {/* Active Deficit Card */}
+          <div 
+            onClick={() => onNavigate('workouts')}
+            className="bg-white dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800/80 p-4 rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.01)] flex flex-col justify-between cursor-pointer hover:border-primary/20 hover:-translate-y-0.5 transition-all duration-200"
+          >
+            <div className="flex justify-between items-start">
+              <span className="text-[10px] font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-wider">Daily Deficit</span>
+              <Flame className="w-4.5 h-4.5 text-primary fill-primary/10" />
+            </div>
+            <div className="mt-3">
+              <p className="text-xl font-black text-neutral-900 dark:text-white leading-none">
+                {currentDeficit.toLocaleString()} <span className="text-[10px] font-medium text-neutral-400">kcal</span>
+              </p>
+              <p className="text-[9px] text-neutral-400 font-bold mt-1.5">
+                Target: {targetDeficit} kcal
+              </p>
+            </div>
+          </div>
+
+          {/* Protein Progress Card */}
+          <div 
+            onClick={() => onNavigate('food')}
+            className="bg-white dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800/80 p-4 rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.01)] flex flex-col justify-between cursor-pointer hover:border-primary/20 hover:-translate-y-0.5 transition-all duration-200"
+          >
+            <div className="flex justify-between items-start">
+              <span className="text-[10px] font-black text-neutral-400 dark:text-neutral-500 uppercase tracking-wider">Protein Target</span>
+              <Award className="w-4.5 h-4.5 text-primary" />
+            </div>
+            <div className="mt-3 space-y-1.5">
+              <div className="flex justify-between items-baseline">
+                <span className="text-xl font-black text-neutral-900 dark:text-white leading-none">
+                  {consumedProtein.toFixed(1)}g
+                </span>
+                <span className="text-[10px] font-extrabold text-primary">{proteinPercent}%</span>
+              </div>
+              <div className="w-full bg-neutral-100 dark:bg-neutral-800 h-1.5 rounded-full overflow-hidden">
+                <div 
+                  className="bg-primary h-full rounded-full transition-all duration-500" 
+                  style={{ width: `${proteinPercent}%` }}
+                />
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* Deficit State Card */}
-        <div 
-          onClick={() => onNavigate('workouts')}
-          className="bg-white dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800/80 p-4 rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.01)] flex flex-col items-center text-center cursor-pointer hover:border-primary/20 hover:-translate-y-0.5 transition-all active:scale-95 duration-200"
-        >
-          <div className="w-10 h-10 mb-3 flex items-center justify-center bg-primary/10 rounded-full text-primary shadow-[inset_0_1px_2px_rgba(0,0,0,0.03)]">
-            <Flame className="w-5 h-5 fill-primary" />
+        {/* Full-width Goal Progress Cards */}
+        <div className="grid grid-cols-1 gap-3.5 pt-1.5">
+          {/* Target Deficit Progress Meter */}
+          <div className="bg-white dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800/80 p-4.5 rounded-2xl shadow-sm space-y-3">
+            <div className="flex justify-between items-center text-xs font-bold text-neutral-800 dark:text-white uppercase tracking-wider">
+              <span className="flex items-center gap-1.5"><Target className="w-4 h-4 text-primary" /> Deficit Target Progress</span>
+              <span className="font-extrabold text-primary">{deficitProgressPercent}%</span>
+            </div>
+            <div className="space-y-1.5">
+              <div className="w-full bg-neutral-100 dark:bg-neutral-800 h-2.5 rounded-full overflow-hidden">
+                <div 
+                  className="bg-primary h-full rounded-full transition-all duration-500" 
+                  style={{ width: `${deficitProgressPercent}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-[9px] font-bold text-neutral-400">
+                <span>0 kcal</span>
+                <span>Active Deficit: {currentDeficit} kcal</span>
+                <span>Goal: {targetDeficit} kcal</span>
+              </div>
+            </div>
           </div>
-          <span className="text-[9px] font-bold text-neutral-400 dark:text-neutral-500 uppercase tracking-widest">Net Deficit</span>
-          <span className="text-sm font-black text-neutral-900 dark:text-neutral-100 mt-0.5">{currentDeficit.toLocaleString()}</span>
-          <span className="text-[9px] text-primary font-bold mt-1.5 flex items-center gap-0.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
-            Goal: {targetDeficit}
-          </span>
-        </div>
 
-        {/* Weight & Body Comp Card */}
-        <div 
-          onClick={() => onNavigate('progress')}
-          className="bg-white dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800/80 p-4 rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.01)] flex flex-col items-center text-center cursor-pointer hover:border-primary/20 hover:-translate-y-0.5 transition-all active:scale-95 duration-200"
-        >
-          <div className="w-10 h-10 mb-3 flex items-center justify-center bg-neutral-50 dark:bg-neutral-800 rounded-full text-neutral-700 dark:text-neutral-300 shadow-[inset_0_1px_2px_rgba(0,0,0,0.03)]">
-            <Scale className="w-5 h-5" />
-          </div>
-          <span className="text-[9px] font-bold text-neutral-400 dark:text-neutral-500 uppercase tracking-widest">Weight</span>
-          <span className="text-sm font-black text-neutral-900 dark:text-neutral-100 mt-0.5">{latestWeightLog.weight.toFixed(1)}kg</span>
-          <div className="mt-1 flex flex-col items-center text-[8px] leading-tight text-neutral-400 font-bold">
-            <span className="text-primary">{weightChangeStr}</span>
-            <span className="font-normal">MA7: {ma7Weight}</span>
+          {/* Body Fat Goal Progress Meter */}
+          <div className="bg-white dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800/80 p-4.5 rounded-2xl shadow-sm space-y-3">
+            <div className="flex justify-between items-center text-xs font-bold text-neutral-800 dark:text-white uppercase tracking-wider">
+              <span className="flex items-center gap-1.5"><Heart className="w-4 h-4 text-rose-500" /> Body Fat Goal Progress</span>
+              <span className="font-extrabold text-rose-500">{bodyFatGoalProgress}%</span>
+            </div>
+            <div className="space-y-1.5">
+              <div className="w-full bg-neutral-100 dark:bg-neutral-800 h-2.5 rounded-full overflow-hidden">
+                <div 
+                  className="bg-[#f43f5e] h-full rounded-full transition-all duration-500" 
+                  style={{ width: `${bodyFatGoalProgress}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-[9px] font-bold text-neutral-400">
+                <span>Start: {(bodyCompLogs[bodyCompLogs.length - 1]?.bodyFatPercent || 15.9).toFixed(1)}%</span>
+                <span>Current: {bodyFatVal.toFixed(1)}%</span>
+                <span>Goal: {profile.targetBodyFat}%</span>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -247,7 +411,6 @@ export default function Dashboard({
             </p>
           </div>
         </div>
-        {/* Faint luxury glassmorphism radial accent */}
         <div className="absolute -top-12 -right-12 w-28 h-28 bg-primary/10 blur-[40px] rounded-full select-none"></div>
       </section>
 
@@ -260,7 +423,7 @@ export default function Dashboard({
           )}
         </div>
         
-        {workoutLogs.length === 0 ? (
+        {dailyWorkouts.length === 0 ? (
           <div className="border border-dashed border-neutral-150 dark:border-neutral-800 rounded-2xl p-6 text-center">
             <p className="text-xs text-neutral-400 font-bold mb-3">No workouts logged for today.</p>
             <button
@@ -272,7 +435,7 @@ export default function Dashboard({
           </div>
         ) : (
           <div className="space-y-3">
-            {workoutLogs.map((workout) => (
+            {dailyWorkouts.map((workout) => (
               <div 
                 key={workout.id} 
                 className="group flex items-center justify-between p-3.5 bg-neutral-50 dark:bg-neutral-800/40 rounded-[18px] border border-neutral-100/60 dark:border-neutral-800/40 hover:border-primary/20 transition-all relative"
@@ -328,7 +491,7 @@ export default function Dashboard({
           </button>
         </div>
 
-        {foodLogs.length === 0 ? (
+        {dailyFood.length === 0 ? (
           <div className="border border-dashed border-neutral-150 dark:border-neutral-800 rounded-2xl p-6 text-center">
             <p className="text-xs text-neutral-400 font-bold mb-3">No foods logged for today.</p>
             <button
@@ -340,7 +503,7 @@ export default function Dashboard({
           </div>
         ) : (
           <div className="divide-y divide-neutral-100 dark:divide-neutral-800/80">
-            {foodLogs.slice(-3).reverse().map((food) => (
+            {dailyFood.slice(-3).reverse().map((food) => (
               <div key={food.id} className="group flex items-center justify-between py-3 px-1 hover:bg-neutral-50/50 dark:hover:bg-neutral-800/10 rounded-lg transition-colors relative">
                 <div className="flex items-center gap-3">
                   <div className="w-11 h-11 text-xl flex items-center justify-center bg-neutral-100 dark:bg-neutral-800 rounded-xl select-none">

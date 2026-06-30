@@ -1,16 +1,22 @@
 import React from 'react';
 import { Calendar, Settings } from 'lucide-react';
+import { UserProfile } from '../types';
+import { getFormattedDate } from '../utils';
 
 interface TopAppBarProps {
-  activeTab: 'home' | 'food' | 'workouts' | 'progress' | 'calendar' | 'settings';
-  onNavigate: (tab: 'home' | 'food' | 'workouts' | 'progress' | 'calendar' | 'settings') => void;
+  activeTab: 'home' | 'food' | 'workouts' | 'progress' | 'calendar' | 'settings' | 'bodycomp';
+  onNavigate: (tab: 'home' | 'food' | 'workouts' | 'progress' | 'calendar' | 'settings' | 'bodycomp') => void;
   streakCount: number;
+  profile: UserProfile;
+  selectedDateString: string;
 }
 
 export default function TopAppBar({
   activeTab,
   onNavigate,
-  streakCount
+  streakCount,
+  profile,
+  selectedDateString
 }: TopAppBarProps) {
 
   // Dynamic header config based on the active tab
@@ -20,43 +26,49 @@ export default function TopAppBar({
         return {
           title: "Dashboard",
           subtitle: "Today's Summary",
-          statusText: "Monday, June 29, 2026" // Dashboard only optional status
+          statusText: getFormattedDate(selectedDateString)
         };
       case 'food':
         return {
           title: "Food",
-          subtitle: "Today's Meals",
+          subtitle: `Meals for ${getFormattedDate(selectedDateString)}`,
           statusText: null
         };
       case 'workouts':
         return {
           title: "Activity",
-          subtitle: "Today's Workout",
+          subtitle: `Workouts for ${getFormattedDate(selectedDateString)}`,
           statusText: null
         };
       case 'progress':
         return {
           title: "Progress",
           subtitle: "Your Body Transformation",
-          statusText: "Last 30 Days" // Progress page optional status
+          statusText: "Last 30 Days"
         };
       case 'calendar':
         return {
           title: "Calendar",
           subtitle: "History & Daily Records",
-          statusText: "June 2026" // Calendar page optional status
+          statusText: getFormattedDate(selectedDateString)
         };
       case 'settings':
         return {
-          title: "Settings",
-          subtitle: "App Preferences & Goals",
+          title: profile.name,
+          subtitle: profile.email,
+          statusText: null
+        };
+      case 'bodycomp':
+        return {
+          title: "Body Comp",
+          subtitle: "Composition & Metrics",
           statusText: null
         };
       default:
         return {
           title: "Dashboard",
           subtitle: "Today's Summary",
-          statusText: "Monday, June 29, 2026"
+          statusText: getFormattedDate(selectedDateString)
         };
     }
   };

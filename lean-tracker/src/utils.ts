@@ -14,7 +14,10 @@ export const INITIAL_PROFILE: UserProfile = {
   streakCount: 12,
   height: 175,
   notificationsEnabled: true,
-  activityLevel: "Moderately Active"
+  activityLevel: "Moderately Active",
+  age: 25,
+  gender: "Male",
+  currentWeight: 70.5
 };
 
 export const INITIAL_FOOD_DB: FoodDbItem[] = [
@@ -292,7 +295,15 @@ export function getFormattedDate(dateStr: string): string {
   const month = parseInt(parts[1]) - 1;
   const day = parseInt(parts[2]);
   const date = new Date(year, month, day);
-  return date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  return date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+}
+
+export function getTodayDateString(): string {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = (d.getMonth() + 1).toString().padStart(2, '0');
+  const day = d.getDate().toString().padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 export function calculateMA7(logs: BodyCompLogItem[], targetIndex: number): number {
